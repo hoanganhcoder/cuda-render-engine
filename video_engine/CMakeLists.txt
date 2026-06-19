@@ -70,6 +70,7 @@ target_link_libraries(video_engine_cuda
   PRIVATE
     CUDA::cudart
     CUDA::cuda_driver
+    video_engine_ffmpeg
 )
 
 if(TARGET CUDA::cudadevrt)
