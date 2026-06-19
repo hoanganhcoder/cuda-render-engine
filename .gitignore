@@ -1,0 +1,7 @@
+*.py[odc]
+__pycache__/
+ffmpeg-dev
+build/
+
+env
+venv

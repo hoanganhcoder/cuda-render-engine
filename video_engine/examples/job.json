@@ -1,0 +1,35 @@
+{
+  "input": "input.mp4",
+  "output": "output.mp4",
+  "width": 1280,
+  "height": 720,
+  "fps": 30,
+  "regions": [
+    {
+      "start": 1.2,
+      "end": 4.8,
+      "x": 0,
+      "y": 610,
+      "w": 1280,
+      "h": 90,
+      "strength": 0.85,
+      "feather": 45,
+      "vertical_stretch": 1.0,
+      "horizontal_blur": 0.25,
+      "temporal_blend": 0.18
+    },
+    {
+      "start": 6.0,
+      "end": 8.5,
+      "x": 120,
+      "y": 500,
+      "w": 900,
+      "h": 120,
+      "strength": 0.75,
+      "feather": 60,
+      "vertical_stretch": 0.8,
+      "horizontal_blur": 0.2,
+      "temporal_blend": 0.12
+    }
+  ]
+}
