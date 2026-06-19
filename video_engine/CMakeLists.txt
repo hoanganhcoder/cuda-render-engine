@@ -69,9 +69,12 @@ target_include_directories(video_engine_cuda
 target_link_libraries(video_engine_cuda
   PRIVATE
     CUDA::cudart
-    CUDA::cudadevrt
     CUDA::cuda_driver
 )
+
+if(TARGET CUDA::cudadevrt)
+  target_link_libraries(video_engine_cuda PRIVATE CUDA::cudadevrt)
+endif()
 
 set_target_properties(video_engine_cuda PROPERTIES
   POSITION_INDEPENDENT_CODE ON
