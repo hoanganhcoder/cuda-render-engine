@@ -60,6 +60,31 @@ Run:
 PYTHONPATH=build python examples/test_render.py input.mp4 output.mp4
 ```
 
+## Colab Quickstart
+
+Clone and run:
+
+```bash
+git clone https://github.com/hoanganhcoder/cuda-render-engine.git
+cd cuda-render-engine/video_engine
+bash scripts/setup_colab.sh
+bash scripts/smoke_test_colab.sh
+```
+
+What `setup_colab.sh` does:
+
+- installs `pybind11`, `cmake`, and `ninja`
+- downloads the latest `linux64-gpl-shared` FFmpeg build from `btbn/ffmpeg-builds`
+- stages it into `video_engine/ffmpeg-dev`
+- configures and builds the Python module
+
+What `smoke_test_colab.sh` does:
+
+- sets `PYTHONPATH` and `LD_LIBRARY_PATH`
+- downloads a small sample MP4
+- imports `video_engine`
+- runs a simple render test
+
 ## Python API
 
 ```python

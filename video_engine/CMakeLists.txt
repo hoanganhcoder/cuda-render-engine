@@ -8,6 +8,10 @@ set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+if(NOT CMAKE_CUDA_ARCHITECTURES)
+  set(CMAKE_CUDA_ARCHITECTURES native)
+endif()
+
 option(VIDEO_ENGINE_ENABLE_NATIVE_ARCH "Enable native architecture optimizations" OFF)
 
 if(VIDEO_ENGINE_ENABLE_NATIVE_ARCH)
@@ -51,7 +55,28 @@ set(VIDEO_ENGINE_SOURCES
   src/codec/FFmpegDecoder.cpp
   src/codec/FFmpegEncoder.cpp
   src/cuda/CudaContext.cpp
+)
+
+add_library(video_engine_cuda STATIC
   src/cuda/CudaSubtitleRectEffect.cu
+)
+
+target_include_directories(video_engine_cuda
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+target_link_libraries(video_engine_cuda
+  PRIVATE
+    CUDA::cudart
+    CUDA::cudadevrt
+    CUDA::cuda_driver
+)
+
+set_target_properties(video_engine_cuda PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+  CUDA_SEPARABLE_COMPILATION ON
+  CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
 pybind11_add_module(video_engine MODULE ${VIDEO_ENGINE_SOURCES})
@@ -65,14 +90,10 @@ target_link_libraries(video_engine
   PRIVATE
     CUDA::cudart
     CUDA::cuda_driver
+    video_engine_cuda
     video_engine_ffmpeg
 )
 
 set_target_properties(video_engine PROPERTIES
-  CUDA_SEPARABLE_COMPILATION ON
-  CUDA_RESOLVE_DEVICE_SYMBOLS ON
+  LINKER_LANGUAGE CXX
 )
-
-if(NOT CMAKE_CUDA_ARCHITECTURES)
-  set_property(TARGET video_engine PROPERTY CUDA_ARCHITECTURES native)
-endif()
