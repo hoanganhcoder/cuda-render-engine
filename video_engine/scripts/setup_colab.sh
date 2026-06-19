@@ -7,12 +7,12 @@ FFMPEG_URL="${FFMPEG_URL:-$FFMPEG_URL_DEFAULT}"
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
 FFMPEG_STAGE_DIR="${FFMPEG_STAGE_DIR:-$REPO_ROOT/ffmpeg-dev}"
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-/tmp/video-engine-ffmpeg}"
-PYBIND11_DIR="${PYBIND11_DIR:-$(python -c 'import pybind11; print(pybind11.get_cmake_dir())')}"
 
 echo "[1/6] Repo root: $REPO_ROOT"
 echo "[2/6] Installing Python build tools"
 python -m pip install --upgrade pip
 python -m pip install pybind11 cmake ninja
+PYBIND11_DIR="${PYBIND11_DIR:-$(python -c 'import pybind11; print(pybind11.get_cmake_dir())')}"
 
 echo "[3/6] Verifying CUDA runtime"
 if ! command -v nvidia-smi >/dev/null 2>&1; then
