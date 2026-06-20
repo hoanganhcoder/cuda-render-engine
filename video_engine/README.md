@@ -74,8 +74,9 @@ bash scripts/smoke_test_colab.sh
 What `setup_colab.sh` does:
 
 - installs `pybind11`, `cmake`, and `ninja`
-- downloads the latest `linux64-gpl-shared` FFmpeg build from `btbn/ffmpeg-builds`
-- stages it into `video_engine/ffmpeg-dev`
+- installs Linux build dependencies
+- builds `nv-codec-headers` pinned for older Colab NVENC driver compatibility
+- builds FFmpeg from source into `video_engine/ffmpeg-dev`
 - configures and builds the Python module
 
 What `smoke_test_colab.sh` does:
@@ -125,6 +126,7 @@ fall back to decoder values if omitted or set to `0`.
 - FFmpeg must be built with CUDA, NVDEC, and NVENC enabled.
 - Current zero-copy path expects NVDEC output surfaces in `NV12`.
 - Output encoder is currently `h264_nvenc`.
+- Colab may need a pinned FFmpeg + `nv-codec-headers` combo to match its driver API.
 
 ## Limitations
 
