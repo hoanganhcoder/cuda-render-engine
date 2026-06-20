@@ -83,14 +83,14 @@ set_target_properties(video_engine_cuda PROPERTIES
   CUDA_RESOLVE_DEVICE_SYMBOLS ON
 )
 
-pybind11_add_module(video_engine MODULE ${VIDEO_ENGINE_SOURCES})
+pybind11_add_module(_video_engine_native MODULE ${VIDEO_ENGINE_SOURCES})
 
-target_include_directories(video_engine
+target_include_directories(_video_engine_native
   PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-target_link_libraries(video_engine
+target_link_libraries(_video_engine_native
   PRIVATE
     CUDA::cudart
     CUDA::cuda_driver
@@ -98,6 +98,6 @@ target_link_libraries(video_engine
     video_engine_ffmpeg
 )
 
-set_target_properties(video_engine PROPERTIES
+set_target_properties(_video_engine_native PROPERTIES
   LINKER_LANGUAGE CXX
 )

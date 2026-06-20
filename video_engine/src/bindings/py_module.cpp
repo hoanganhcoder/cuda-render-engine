@@ -16,7 +16,7 @@ bool renderFromPython(const py::dict& job_dict) {
 
 }  // namespace video_engine
 
-PYBIND11_MODULE(video_engine, module) {
+PYBIND11_MODULE(_video_engine_native, module) {
   module.doc() = "Headless CUDA/FFmpeg video render engine";
   module.def("version", []() { return std::string(video_engine::kVersion); });
   module.def("render", &video_engine::renderFromPython, py::arg("job"));

@@ -25,9 +25,13 @@ fi
 export PYTHONPATH="$BUILD_DIR:${PYTHONPATH:-}"
 export LD_LIBRARY_PATH="$FFMPEG_LIB_DIR:${LD_LIBRARY_PATH:-}"
 export VIDEO_ENGINE_REPO_ROOT="$REPO_ROOT"
+export VIDEO_ENGINE_PACKAGE_PARENT="$(dirname "$REPO_ROOT")"
 
 python - <<'PY'
 import os
+import sys
+
+sys.path.insert(0, os.environ["VIDEO_ENGINE_PACKAGE_PARENT"])
 import video_engine
 
 print("video_engine version =", video_engine.version())

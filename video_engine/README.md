@@ -81,10 +81,20 @@ What `setup_colab.sh` does:
 
 What `smoke_test_colab.sh` does:
 
-- sets `PYTHONPATH` and `LD_LIBRARY_PATH`
+- sets package/runtime paths and `LD_LIBRARY_PATH`
 - downloads a small sample MP4
 - imports `video_engine`
 - runs a simple render test
+
+Direct Colab import:
+
+```python
+import sys
+sys.path.insert(0, "/content/cuda-render-engine")
+
+import video_engine
+print(video_engine.version())
+```
 
 ## Python API
 
