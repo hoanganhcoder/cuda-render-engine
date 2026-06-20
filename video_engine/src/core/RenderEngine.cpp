@@ -68,6 +68,9 @@ bool RenderEngine::render(const RenderJob& input_job) {
           output_frame,
           active_regions,
           cuda_context_.stream());
+      output_frame->format = AV_PIX_FMT_CUDA;
+      output_frame->width = job.width;
+      output_frame->height = job.height;
       encoder.write(output_frame);
       cloneFrameTo(previous_frame, output_frame);
 

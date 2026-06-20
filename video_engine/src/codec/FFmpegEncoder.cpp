@@ -103,9 +103,14 @@ void FFmpegEncoder::open(const std::string& output_path, int width, int height, 
 
 void FFmpegEncoder::write(AVFrame* frame) {
   if (!frame || frame->width != width_ || frame->height != height_) {
-    throw std::runtime_error("Encoder received invalid GPU frame dimensions.");
+    const int got_width = frame ? frame->width : -1;
+    const int got_height = frame ? frame->height : -1;
+    throw std::runtime_error(
+        "Encoder received invalid GPU frame dimensions. expected=" + std::to_string(width_) + "x" +
+        std::to_string(height_) + " got=" + std::to_string(got_width) + "x" + std::to_string(got_height));
   }
 
+  frame->format = AV_PIX_FMT_CUDA;
   frame->pts = next_pts_++;
   encodeFrame(frame);
 }
