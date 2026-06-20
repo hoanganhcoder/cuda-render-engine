@@ -70,8 +70,7 @@ cd ffmpeg-src
   --enable-cuda-nvcc \
   --enable-cuvid \
   --enable-nvdec \
-  --enable-nvenc \
-  --enable-libnpp
+  --enable-nvenc
 
 make -j"$NPROC_VALUE"
 make install

@@ -76,7 +76,7 @@ What `setup_colab.sh` does:
 - installs `pybind11`, `cmake`, and `ninja`
 - installs Linux build dependencies
 - builds `nv-codec-headers` pinned for older Colab NVENC driver compatibility
-- builds FFmpeg from source into `video_engine/ffmpeg-dev`
+- builds FFmpeg from source into `video_engine/ffmpeg-dev` without requiring `libnpp`
 - configures and builds the Python module
 
 What `smoke_test_colab.sh` does:
