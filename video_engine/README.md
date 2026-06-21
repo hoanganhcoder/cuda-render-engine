@@ -106,11 +106,14 @@ job = {
     "output": "output.mp4",
     "subtitle_srt": "examples/sample.srt",
     "subtitle_font_family": "Noto Sans",
-    "subtitle_font_size": 36,
+    "subtitle_font_size": 48,
     "subtitle_bold": True,
     "subtitle_italic": False,
-    "subtitle_outline": 2,
-    "subtitle_shadow": 1,
+    "subtitle_text_color": "#FFF200",
+    "subtitle_outline_color": "#101010",
+    "subtitle_back_color": "#00000000",
+    "subtitle_outline": 4,
+    "subtitle_shadow": 0,
     "regions": [
         {
             "start": 1.2,
@@ -139,6 +142,9 @@ Hard subtitle inputs supported now:
 - `subtitle_font_family`: preferred font family, e.g. `Noto Sans`, `DejaVu Sans`
 - `subtitle_font_path`: optional explicit font file path
 - `subtitle_font_size`: font size for libass renderer
+- `subtitle_text_color`: main text color in `#RRGGBB` or `#RRGGBBAA`
+- `subtitle_outline_color`: outline color in `#RRGGBB` or `#RRGGBBAA`
+- `subtitle_back_color`: ASS background/box color in `#RRGGBB` or `#RRGGBBAA`
 - `subtitle_bold`: bold text on/off
 - `subtitle_italic`: italic text on/off
 - `subtitle_outline`: outline thickness
@@ -151,6 +157,14 @@ Subtitle rendering path:
 
 - preferred path: `libass + FreeType + Fontconfig` for Unicode, bold, italic, outline, shadow, and nicer typography
 - fallback path: built-in bitmap renderer when `libass` is unavailable at build time
+
+Recommended "fansub-style" defaults:
+
+- `subtitle_text_color="#FFF200"`
+- `subtitle_outline_color="#101010"`
+- `subtitle_back_color="#00000000"`
+- `subtitle_outline=4`
+- `subtitle_shadow=0`
 
 ## JSON Job Example
 

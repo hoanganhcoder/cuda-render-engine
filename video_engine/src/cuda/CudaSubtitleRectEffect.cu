@@ -66,6 +66,18 @@ __device__ float softEdgeDistance(int coord, int start, int size) {
   return 0.0f;
 }
 
+__device__ int chooseVerticalAnchorY(const DeviceRegion& region, int height) {
+  const int top_anchor = region.y - 1;
+  if (top_anchor >= 0) {
+    return top_anchor;
+  }
+  const int bottom_anchor = region.y + region.h;
+  if (bottom_anchor < height) {
+    return bottom_anchor;
+  }
+  return clampInt(region.y, 0, height - 1);
+}
+
 __device__ float edgeMask(const DeviceRegion& region, int x, int y) {
   const float dx = softEdgeDistance(x, region.x, region.w);
   const float dy = softEdgeDistance(y, region.y, region.h);
@@ -121,9 +133,7 @@ __device__ float sampleVerticalLuma(
     int x,
     int y,
     const DeviceRegion& region) {
-  const int rect_center_y = region.y + region.h / 2;
-  const bool use_top = y <= rect_center_y;
-  const int anchor_y = use_top ? region.y - 1 : region.y + region.h;
+  const int anchor_y = chooseVerticalAnchorY(region, height);
   const int spread = max(1, static_cast<int>(region.h * fmaxf(region.vertical_stretch, 0.25f) * 0.5f));
 
   float accum = 0.0f;
@@ -160,9 +170,7 @@ __device__ uchar2 sampleVerticalChroma(
   const int chroma_width = width / 2;
   const int chroma_height = height / 2;
   const int sample_x = x / 2;
-  const int rect_center_y = region.y + region.h / 2;
-  const bool use_top = y <= rect_center_y;
-  const int anchor_y = (use_top ? region.y - 1 : region.y + region.h) / 2;
+  const int anchor_y = chooseVerticalAnchorY(region, height) / 2;
   return loadChroma(source_uv, pitch_uv, chroma_width, chroma_height, sample_x, anchor_y);
 }
 

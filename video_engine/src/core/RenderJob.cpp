@@ -1,5 +1,6 @@
 #include "core/RenderJob.h"
 
+#include <cctype>
 #include <stdexcept>
 
 namespace py = pybind11;
@@ -54,11 +55,14 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.subtitle_text = optionalValue<std::string>(job_dict, "subtitle_text", "");
   job.subtitle_font_family = optionalValue<std::string>(job_dict, "subtitle_font_family", "Noto Sans");
   job.subtitle_font_path = optionalValue<std::string>(job_dict, "subtitle_font_path", "");
+  job.subtitle_text_color = optionalValue<std::string>(job_dict, "subtitle_text_color", "#FFF200");
+  job.subtitle_outline_color = optionalValue<std::string>(job_dict, "subtitle_outline_color", "#101010");
+  job.subtitle_back_color = optionalValue<std::string>(job_dict, "subtitle_back_color", "#00000000");
   job.subtitle_font_scale = optionalValue<int>(job_dict, "subtitle_font_scale", 4);
   job.subtitle_font_size = optionalValue<int>(job_dict, "subtitle_font_size", 36);
   job.subtitle_margin = optionalValue<int>(job_dict, "subtitle_margin", 8);
-  job.subtitle_outline = optionalValue<int>(job_dict, "subtitle_outline", 2);
-  job.subtitle_shadow = optionalValue<int>(job_dict, "subtitle_shadow", 1);
+  job.subtitle_outline = optionalValue<int>(job_dict, "subtitle_outline", 3);
+  job.subtitle_shadow = optionalValue<int>(job_dict, "subtitle_shadow", 0);
   job.subtitle_bold = optionalValue<bool>(job_dict, "subtitle_bold", true);
   job.subtitle_italic = optionalValue<bool>(job_dict, "subtitle_italic", false);
   job.subtitle_opacity = optionalValue<float>(job_dict, "subtitle_opacity", 1.0f);
@@ -76,6 +80,22 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
 }
 
 void RenderJob::validate() const {
+  auto isValidHexColor = [](const std::string& value) {
+    if (value.empty() || value[0] != '#') {
+      return false;
+    }
+    const size_t hex_digits = value.size() - 1;
+    if (hex_digits != 6 && hex_digits != 8) {
+      return false;
+    }
+    for (size_t index = 1; index < value.size(); ++index) {
+      if (!std::isxdigit(static_cast<unsigned char>(value[index]))) {
+        return false;
+      }
+    }
+    return true;
+  };
+
   if (input.empty()) {
     throw std::runtime_error("Input path must not be empty.");
   }
@@ -102,6 +122,15 @@ void RenderJob::validate() const {
   }
   if (subtitle_shadow < 0) {
     throw std::runtime_error("subtitle_shadow must be >= 0.");
+  }
+  if (!isValidHexColor(subtitle_text_color)) {
+    throw std::runtime_error("subtitle_text_color must be in #RRGGBB or #RRGGBBAA format.");
+  }
+  if (!isValidHexColor(subtitle_outline_color)) {
+    throw std::runtime_error("subtitle_outline_color must be in #RRGGBB or #RRGGBBAA format.");
+  }
+  if (!isValidHexColor(subtitle_back_color)) {
+    throw std::runtime_error("subtitle_back_color must be in #RRGGBB or #RRGGBBAA format.");
   }
   if (subtitle_opacity < 0.0f || subtitle_opacity > 1.0f) {
     throw std::runtime_error("subtitle_opacity must be within [0, 1].");

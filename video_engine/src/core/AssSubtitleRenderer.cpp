@@ -4,7 +4,9 @@
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
+#include <iomanip>
 #include <limits>
+#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -58,26 +60,50 @@ std::string formatAssTime(double seconds) {
   return std::string(buffer);
 }
 
-std::string buildAssScript(const RenderJob& job, const std::vector<SubtitleCue>& cues) {
+std::string toAssColor(const std::string& hex) {
+  const auto parse_component = [&](size_t offset) {
+    return static_cast<unsigned int>(std::stoul(hex.substr(offset, 2), nullptr, 16));
+  };
+
+  const unsigned int red = parse_component(1);
+  const unsigned int green = parse_component(3);
+  const unsigned int blue = parse_component(5);
+  unsigned int alpha = 0;
+  if (hex.size() == 9) {
+    const unsigned int rgba_alpha = parse_component(7);
+    alpha = 255U - rgba_alpha;
+  }
+
+  std::ostringstream stream;
+  stream << "&H" << std::uppercase << std::setfill('0') << std::hex << std::setw(2) << alpha << std::setw(2)
+         << blue << std::setw(2) << green << std::setw(2) << red;
+  return stream.str();
+}
+
+std::string buildAssScript(const RenderJob& job, const std::vector<SubtitleCue>& cues, int video_width, int video_height) {
   std::string script;
   script.reserve(4096);
   script += "[Script Info]\n";
   script += "ScriptType: v4.00+\n";
-  script += "PlayResX: 1920\n";
-  script += "PlayResY: 1080\n";
+  script += "PlayResX: " + std::to_string(video_width) + "\n";
+  script += "PlayResY: " + std::to_string(video_height) + "\n";
   script += "[V4+ Styles]\n";
   script += "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
             "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
             "Alignment, MarginL, MarginR, MarginV, Encoding\n";
+  const std::string text_color = toAssColor(job.subtitle_text_color);
+  const std::string outline_color = toAssColor(job.subtitle_outline_color);
+  const std::string back_color = toAssColor(job.subtitle_back_color);
   script += "Style: Default," + job.subtitle_font_family + "," + std::to_string(job.subtitle_font_size) +
-            ",&H00FFFFFF,&H000000FF,&H00000000,&H64000000," + (job.subtitle_bold ? "-1" : "0") + "," +
+            "," + text_color + ",&H000000FF," + outline_color + "," + back_color + "," +
+            (job.subtitle_bold ? "-1" : "0") + "," +
             (job.subtitle_italic ? "-1" : "0") + ",0,0,100,100,0,0,1," + std::to_string(job.subtitle_outline) +
             "," + std::to_string(job.subtitle_shadow) + ",2,20,20," + std::to_string(job.subtitle_margin) + ",1\n";
   script += "[Events]\n";
   script += "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
   for (const SubtitleCue& cue : cues) {
     script += "Dialogue: 0," + formatAssTime(cue.start) + "," + formatAssTime(cue.end) +
-              ",Default,,0,0,0,," + escapeAssText(cue.text) + "\n";
+              ",Default,,0,0," + std::to_string(job.subtitle_margin) + ",," + escapeAssText(cue.text) + "\n";
   }
   return script;
 }
@@ -154,7 +180,7 @@ void AssSubtitleRenderer::initialize(const RenderJob& job, int video_width, int 
     cues.push_back(SubtitleCue{0.0, 1.0e12, job.subtitle_text});
   }
 
-  const std::string ass_script = buildAssScript(job, cues);
+  const std::string ass_script = buildAssScript(job, cues, video_width, video_height);
   impl_->track = ass_read_memory(
       impl_->library,
       reinterpret_cast<char*>(const_cast<char*>(ass_script.data())),
