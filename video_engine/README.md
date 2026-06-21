@@ -105,6 +105,12 @@ job = {
     "input": "input.mp4",
     "output": "output.mp4",
     "subtitle_srt": "examples/sample.srt",
+    "subtitle_font_family": "Noto Sans",
+    "subtitle_font_size": 36,
+    "subtitle_bold": True,
+    "subtitle_italic": False,
+    "subtitle_outline": 2,
+    "subtitle_shadow": 1,
     "regions": [
         {
             "start": 1.2,
@@ -130,12 +136,21 @@ Hard subtitle inputs supported now:
 
 - `subtitle_srt`: path to an `.srt` file
 - `subtitle_text`: single always-on text string
+- `subtitle_font_family`: preferred font family, e.g. `Noto Sans`, `DejaVu Sans`
+- `subtitle_font_path`: optional explicit font file path
+- `subtitle_font_size`: font size for libass renderer
+- `subtitle_bold`: bold text on/off
+- `subtitle_italic`: italic text on/off
+- `subtitle_outline`: outline thickness
+- `subtitle_shadow`: shadow size
 - `subtitle_font_scale`: integer bitmap font scale, default `4`
 - `subtitle_margin`: inner padding inside the active fill region
 - `subtitle_opacity`: subtitle text opacity in `[0, 1]`
 
-Current subtitle renderer is optimized for simple hard-burn text over the fill region that hides old subtitles.
-The first version focuses on ASCII/Latin characters and uses a built-in bitmap font to avoid extra runtime dependencies.
+Subtitle rendering path:
+
+- preferred path: `libass + FreeType + Fontconfig` for Unicode, bold, italic, outline, shadow, and nicer typography
+- fallback path: built-in bitmap renderer when `libass` is unavailable at build time
 
 ## JSON Job Example
 

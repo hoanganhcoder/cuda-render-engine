@@ -101,6 +101,18 @@ __device__ float sampleOverlayAlpha(const DeviceSubtitleOverlay& overlay, int x,
   return normalizeByte(alpha) * clamp01(overlay.opacity);
 }
 
+__device__ uint8_t sampleOverlayMaskValue(const uint8_t* plane, const DeviceSubtitleOverlay& overlay, int x, int y) {
+  if (plane == nullptr || !overlay.enabled()) {
+    return 0;
+  }
+  if (x < overlay.x || y < overlay.y || x >= overlay.x + overlay.width || y >= overlay.y + overlay.height) {
+    return 0;
+  }
+  const int local_x = x - overlay.x;
+  const int local_y = y - overlay.y;
+  return plane[local_y * overlay.stride + local_x];
+}
+
 __device__ float sampleVerticalLuma(
     const uint8_t* source_y,
     int pitch_y,
@@ -188,7 +200,7 @@ __global__ void subtitleRectLumaKernel(
 
   const float overlay_alpha = sampleOverlayAlpha(overlay, x, y);
   if (overlay_alpha > 0.0f) {
-    current = mixFloat(current, normalizeByte(overlay.luma), overlay_alpha);
+    current = mixFloat(current, normalizeByte(sampleOverlayMaskValue(overlay.luma_mask, overlay, x, y)), overlay_alpha);
   }
 
   output_y[y * pitch_y + x] = denormalizeByte(current);
@@ -237,8 +249,14 @@ __global__ void subtitleRectChromaKernel(
 
   const float overlay_alpha = sampleOverlayAlpha(overlay, full_x, full_y);
   if (overlay_alpha > 0.0f) {
-    current_u = mixFloat(current_u, normalizeByte(overlay.chroma_u), overlay_alpha);
-    current_v = mixFloat(current_v, normalizeByte(overlay.chroma_v), overlay_alpha);
+    current_u = mixFloat(
+        current_u,
+        normalizeByte(sampleOverlayMaskValue(overlay.chroma_u_mask, overlay, full_x, full_y)),
+        overlay_alpha);
+    current_v = mixFloat(
+        current_v,
+        normalizeByte(sampleOverlayMaskValue(overlay.chroma_v_mask, overlay, full_x, full_y)),
+        overlay_alpha);
   }
 
   uint8_t* row = output_uv + y * pitch_uv + x * 2;

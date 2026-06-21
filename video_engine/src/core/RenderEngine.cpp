@@ -7,7 +7,6 @@
 #include <libavutil/hwcontext.h>
 
 #include "core/Logger.h"
-#include "core/SrtParser.h"
 #include "core/SubtitleRenderer.h"
 
 namespace video_engine {
@@ -25,16 +24,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
     FFmpegEncoder encoder;
     AVFrame* decoded_frame = nullptr;
     double timestamp_seconds = 0.0;
-    std::vector<SubtitleCue> subtitle_cues;
     SubtitleOverlay current_overlay;
-    std::string current_cue_text;
-    double current_cue_start = -1.0;
-
-    if (!job.subtitle_srt.empty()) {
-      subtitle_cues = SrtParser::parseFile(job.subtitle_srt);
-    } else if (!job.subtitle_text.empty()) {
-      subtitle_cues.push_back(SubtitleCue{0.0, 1.0e12, job.subtitle_text});
-    }
 
     decoder.open(job.input);
     if (job.width <= 0) {
@@ -53,6 +43,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
     for (Region& region : job.regions) {
       region.clampToBounds(job.width, job.height);
     }
+    ass_subtitle_renderer_.initialize(job, job.width, job.height);
 
     Logger::info("Render started.");
     int frame_index = 0;
@@ -74,37 +65,31 @@ bool RenderEngine::render(const RenderJob& input_job) {
       }
 
       const std::vector<Region> active_regions = collectActiveRegions(job, timestamp_seconds);
-      const SubtitleCue* active_cue = findActiveCue(subtitle_cues, timestamp_seconds);
-      if (active_cue) {
-        if (active_cue->text != current_cue_text || active_cue->start != current_cue_start ||
-            (!current_overlay.enabled && !active_regions.empty())) {
-          current_overlay = buildSubtitleOverlay(job, active_regions, active_cue);
-          current_cue_text = active_cue->text;
-          current_cue_start = active_cue->start;
-          if (current_overlay.enabled) {
-            subtitle_mask_buffer_.upload(current_overlay.alpha_mask, cuda_context_.stream());
-          } else {
-            subtitle_mask_buffer_.release();
-          }
-        }
+      current_overlay = buildSubtitleOverlay(job, active_regions, timestamp_seconds);
+      if (current_overlay.enabled) {
+        subtitle_mask_buffer_.upload(current_overlay.alpha_mask, cuda_context_.stream());
+        subtitle_luma_buffer_.upload(current_overlay.luma_mask, cuda_context_.stream());
+        subtitle_chroma_u_buffer_.upload(current_overlay.chroma_u_mask, cuda_context_.stream());
+        subtitle_chroma_v_buffer_.upload(current_overlay.chroma_v_mask, cuda_context_.stream());
       } else {
-        current_overlay = SubtitleOverlay{};
-        current_cue_text.clear();
-        current_cue_start = -1.0;
         subtitle_mask_buffer_.release();
+        subtitle_luma_buffer_.release();
+        subtitle_chroma_u_buffer_.release();
+        subtitle_chroma_v_buffer_.release();
       }
 
       DeviceSubtitleOverlay device_overlay{};
-      if (current_overlay.enabled && subtitle_mask_buffer_.allocated()) {
+      if (current_overlay.enabled && subtitle_mask_buffer_.allocated() && subtitle_luma_buffer_.allocated() &&
+          subtitle_chroma_u_buffer_.allocated() && subtitle_chroma_v_buffer_.allocated()) {
         device_overlay.alpha_mask = subtitle_mask_buffer_.data();
+        device_overlay.luma_mask = subtitle_luma_buffer_.data();
+        device_overlay.chroma_u_mask = subtitle_chroma_u_buffer_.data();
+        device_overlay.chroma_v_mask = subtitle_chroma_v_buffer_.data();
         device_overlay.x = current_overlay.x;
         device_overlay.y = current_overlay.y;
         device_overlay.width = current_overlay.width;
         device_overlay.height = current_overlay.height;
         device_overlay.stride = current_overlay.stride;
-        device_overlay.luma = current_overlay.luma;
-        device_overlay.chroma_u = current_overlay.chroma_u;
-        device_overlay.chroma_v = current_overlay.chroma_v;
         device_overlay.opacity = current_overlay.opacity;
       }
 
@@ -157,30 +142,28 @@ std::vector<Region> RenderEngine::collectActiveRegions(const RenderJob& job, dou
   return active_regions;
 }
 
-const SubtitleCue* RenderEngine::findActiveCue(const std::vector<SubtitleCue>& cues, double timestamp) const {
-  for (const SubtitleCue& cue : cues) {
-    if (cue.isActive(timestamp)) {
-      return &cue;
-    }
-  }
-  return nullptr;
-}
-
 SubtitleOverlay RenderEngine::buildSubtitleOverlay(
     const RenderJob& job,
     const std::vector<Region>& active_regions,
-    const SubtitleCue* active_cue) const {
-  if (active_cue == nullptr || active_regions.empty()) {
+    double timestamp_seconds) const {
+  if (active_regions.empty()) {
     return SubtitleOverlay{};
   }
-  return SubtitleRenderer::buildOverlay(
-      active_regions.front(),
-      active_cue->text,
-      job.width,
-      job.height,
-      job.subtitle_font_scale,
-      job.subtitle_margin,
-      job.subtitle_opacity);
+  if (ass_subtitle_renderer_.available()) {
+    return ass_subtitle_renderer_.render(timestamp_seconds, &active_regions.front());
+  }
+
+  if (!job.subtitle_text.empty()) {
+    return SubtitleRenderer::buildOverlay(
+        active_regions.front(),
+        job.subtitle_text,
+        job.width,
+        job.height,
+        job.subtitle_font_scale,
+        job.subtitle_margin,
+        job.subtitle_opacity);
+  }
+  return SubtitleOverlay{};
 }
 
 AVFrame* RenderEngine::allocateHardwareFrame(AVBufferRef* hw_frames_context, int width, int height) const {

@@ -20,6 +20,7 @@ endif()
 
 find_package(CUDAToolkit REQUIRED)
 find_package(pybind11 CONFIG REQUIRED)
+find_package(PkgConfig QUIET)
 
 add_library(video_engine_ffmpeg INTERFACE)
 set(VIDEO_ENGINE_FFMPEG_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/ffmpeg-dev")
@@ -37,7 +38,9 @@ if(EXISTS "${VIDEO_ENGINE_FFMPEG_ROOT}/include" AND EXISTS "${VIDEO_ENGINE_FFMPE
     "${FFMPEG_SWSCALE_LIBRARY}"
   )
 else()
-  find_package(PkgConfig REQUIRED)
+  if(NOT PkgConfig_FOUND)
+    find_package(PkgConfig REQUIRED)
+  endif()
   pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET
     libavformat
     libavcodec
@@ -47,8 +50,18 @@ else()
   target_link_libraries(video_engine_ffmpeg INTERFACE PkgConfig::FFMPEG)
 endif()
 
+add_library(video_engine_subtitle INTERFACE)
+if(PkgConfig_FOUND)
+  pkg_check_modules(LIBASS QUIET IMPORTED_TARGET libass)
+endif()
+if(TARGET PkgConfig::LIBASS)
+  target_link_libraries(video_engine_subtitle INTERFACE PkgConfig::LIBASS)
+  target_compile_definitions(video_engine_subtitle INTERFACE VIDEO_ENGINE_HAS_LIBASS=1)
+endif()
+
 set(VIDEO_ENGINE_SOURCES
   src/bindings/py_module.cpp
+  src/core/AssSubtitleRenderer.cpp
   src/core/Logger.cpp
   src/core/RenderEngine.cpp
   src/core/RenderJob.cpp
@@ -99,6 +112,7 @@ target_link_libraries(_video_engine_native
     CUDA::cuda_driver
     video_engine_cuda
     video_engine_ffmpeg
+    video_engine_subtitle
 )
 
 set_target_properties(_video_engine_native PROPERTIES

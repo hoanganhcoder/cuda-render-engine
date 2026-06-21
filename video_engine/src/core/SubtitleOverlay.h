@@ -13,12 +13,12 @@ struct SubtitleOverlay {
   int width = 0;
   int height = 0;
   int stride = 0;
-  uint8_t luma = 235;
-  uint8_t chroma_u = 128;
-  uint8_t chroma_v = 128;
   float opacity = 1.0f;
   std::string cue_text;
   std::vector<uint8_t> alpha_mask;
+  std::vector<uint8_t> luma_mask;
+  std::vector<uint8_t> chroma_u_mask;
+  std::vector<uint8_t> chroma_v_mask;
 };
 
 }  // namespace video_engine
