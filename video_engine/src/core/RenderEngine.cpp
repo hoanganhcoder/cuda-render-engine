@@ -44,6 +44,13 @@ bool RenderEngine::render(const RenderJob& input_job) {
       region.clampToBounds(job.width, job.height);
     }
     ass_subtitle_renderer_.initialize(job, job.width, job.height);
+    if (!job.subtitle_srt.empty() || !job.subtitle_text.empty()) {
+      if (ass_subtitle_renderer_.available()) {
+        Logger::info("Using libass subtitle renderer.");
+      } else {
+        Logger::warn("libass renderer unavailable, falling back to built-in bitmap subtitle renderer.");
+      }
+    }
 
     Logger::info("Render started.");
     int frame_index = 0;
