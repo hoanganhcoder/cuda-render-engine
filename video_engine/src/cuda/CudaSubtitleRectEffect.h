@@ -24,7 +24,7 @@ struct DeviceSubtitleOverlay {
   int stride = 0;
   float opacity = 1.0f;
 
-  [[nodiscard]] bool enabled() const {
+  __host__ __device__ [[nodiscard]] bool enabled() const {
     return alpha_mask != nullptr && luma_mask != nullptr && chroma_u_mask != nullptr && chroma_v_mask != nullptr &&
            width > 0 && height > 0;
   }
