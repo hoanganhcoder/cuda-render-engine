@@ -9,6 +9,8 @@
 #include <string>
 #include <vector>
 
+#include "core/SrtParser.h"
+
 #if defined(VIDEO_ENGINE_HAS_LIBASS)
 extern "C" {
 #include <ass/ass.h>
@@ -42,6 +44,42 @@ std::string escapeAssText(const std::string& text) {
     }
   }
   return escaped;
+}
+
+std::string formatAssTime(double seconds) {
+  const int total_centiseconds = static_cast<int>(std::llround(seconds * 100.0));
+  const int hours = total_centiseconds / 360000;
+  const int minutes = (total_centiseconds % 360000) / 6000;
+  const int secs = (total_centiseconds % 6000) / 100;
+  const int centis = total_centiseconds % 100;
+
+  char buffer[32] = {};
+  std::snprintf(buffer, sizeof(buffer), "%d:%02d:%02d.%02d", hours, minutes, secs, centis);
+  return std::string(buffer);
+}
+
+std::string buildAssScript(const RenderJob& job, const std::vector<SubtitleCue>& cues) {
+  std::string script;
+  script.reserve(4096);
+  script += "[Script Info]\n";
+  script += "ScriptType: v4.00+\n";
+  script += "PlayResX: 1920\n";
+  script += "PlayResY: 1080\n";
+  script += "[V4+ Styles]\n";
+  script += "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+            "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+            "Alignment, MarginL, MarginR, MarginV, Encoding\n";
+  script += "Style: Default," + job.subtitle_font_family + "," + std::to_string(job.subtitle_font_size) +
+            ",&H00FFFFFF,&H000000FF,&H00000000,&H64000000," + (job.subtitle_bold ? "-1" : "0") + "," +
+            (job.subtitle_italic ? "-1" : "0") + ",0,0,100,100,0,0,1," + std::to_string(job.subtitle_outline) +
+            "," + std::to_string(job.subtitle_shadow) + ",2,20,20," + std::to_string(job.subtitle_margin) + ",1\n";
+  script += "[Events]\n";
+  script += "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
+  for (const SubtitleCue& cue : cues) {
+    script += "Dialogue: 0," + formatAssTime(cue.start) + "," + formatAssTime(cue.end) +
+              ",Default,,0,0,0,," + escapeAssText(cue.text) + "\n";
+  }
+  return script;
 }
 
 }  // namespace
@@ -109,34 +147,19 @@ void AssSubtitleRenderer::initialize(const RenderJob& job, int video_width, int 
       nullptr,
       1);
 
+  std::vector<SubtitleCue> cues;
   if (!job.subtitle_srt.empty()) {
-    impl_->track = ass_read_file(impl_->library, const_cast<char*>(job.subtitle_srt.c_str()), nullptr);
-  } else {
-    const std::string ass_script =
-        "[Script Info]\n"
-        "ScriptType: v4.00+\n"
-        "PlayResX: 1920\n"
-        "PlayResY: 1080\n"
-        "[V4+ Styles]\n"
-        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
-        "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
-        "Alignment, MarginL, MarginR, MarginV, Encoding\n"
-        "Style: Default," +
-        job.subtitle_font_family + "," + std::to_string(job.subtitle_font_size) +
-        ",&H00FFFFFF,&H000000FF,&H00000000,&H64000000," + (job.subtitle_bold ? "-1" : "0") + "," +
-        (job.subtitle_italic ? "-1" : "0") +
-        ",0,0,100,100,0,0,1," + std::to_string(job.subtitle_outline) + "," +
-        std::to_string(job.subtitle_shadow) + ",2,20,20,20,1\n"
-        "[Events]\n"
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n"
-        "Dialogue: 0,0:00:00.00,9:59:59.00,Default,,0,0,0,," +
-        escapeAssText(job.subtitle_text) + "\n";
-    impl_->track = ass_read_memory(
-        impl_->library,
-        reinterpret_cast<char*>(const_cast<char*>(ass_script.data())),
-        static_cast<size_t>(ass_script.size()),
-        nullptr);
+    cues = SrtParser::parseFile(job.subtitle_srt);
+  } else if (!job.subtitle_text.empty()) {
+    cues.push_back(SubtitleCue{0.0, 1.0e12, job.subtitle_text});
   }
+
+  const std::string ass_script = buildAssScript(job, cues);
+  impl_->track = ass_read_memory(
+      impl_->library,
+      reinterpret_cast<char*>(const_cast<char*>(ass_script.data())),
+      static_cast<size_t>(ass_script.size()),
+      nullptr);
 
   if (!impl_->track) {
     throw std::runtime_error("Failed to load subtitles into libass track.");
