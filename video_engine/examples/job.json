@@ -4,6 +4,10 @@
   "width": 1280,
   "height": 720,
   "fps": 30,
+  "subtitle_srt": "examples/sample.srt",
+  "subtitle_font_scale": 4,
+  "subtitle_margin": 8,
+  "subtitle_opacity": 1.0,
   "regions": [
     {
       "start": 1.2,

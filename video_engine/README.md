@@ -104,6 +104,7 @@ import video_engine
 job = {
     "input": "input.mp4",
     "output": "output.mp4",
+    "subtitle_srt": "examples/sample.srt",
     "regions": [
         {
             "start": 1.2,
@@ -124,6 +125,17 @@ job = {
 print(video_engine.version())
 print(video_engine.render(job))
 ```
+
+Hard subtitle inputs supported now:
+
+- `subtitle_srt`: path to an `.srt` file
+- `subtitle_text`: single always-on text string
+- `subtitle_font_scale`: integer bitmap font scale, default `4`
+- `subtitle_margin`: inner padding inside the active fill region
+- `subtitle_opacity`: subtitle text opacity in `[0, 1]`
+
+Current subtitle renderer is optimized for simple hard-burn text over the fill region that hides old subtitles.
+The first version focuses on ASCII/Latin characters and uses a built-in bitmap font to avoid extra runtime dependencies.
 
 ## JSON Job Example
 

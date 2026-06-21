@@ -88,6 +88,19 @@ __device__ float mixFloat(float a, float b, float amount) {
   return a + (b - a) * amount;
 }
 
+__device__ float sampleOverlayAlpha(const DeviceSubtitleOverlay& overlay, int x, int y) {
+  if (!overlay.enabled()) {
+    return 0.0f;
+  }
+  if (x < overlay.x || y < overlay.y || x >= overlay.x + overlay.width || y >= overlay.y + overlay.height) {
+    return 0.0f;
+  }
+  const int local_x = x - overlay.x;
+  const int local_y = y - overlay.y;
+  const uint8_t alpha = overlay.alpha_mask[local_y * overlay.stride + local_x];
+  return normalizeByte(alpha) * clamp01(overlay.opacity);
+}
+
 __device__ float sampleVerticalLuma(
     const uint8_t* source_y,
     int pitch_y,
@@ -148,7 +161,8 @@ __global__ void subtitleRectLumaKernel(
     int pitch_y,
     int width,
     int height,
-    int region_count) {
+    int region_count,
+    DeviceSubtitleOverlay overlay) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) {
@@ -172,6 +186,11 @@ __global__ void subtitleRectLumaKernel(
     current = blended;
   }
 
+  const float overlay_alpha = sampleOverlayAlpha(overlay, x, y);
+  if (overlay_alpha > 0.0f) {
+    current = mixFloat(current, normalizeByte(overlay.luma), overlay_alpha);
+  }
+
   output_y[y * pitch_y + x] = denormalizeByte(current);
 }
 
@@ -182,7 +201,8 @@ __global__ void subtitleRectChromaKernel(
     int pitch_uv,
     int width,
     int height,
-    int region_count) {
+    int region_count,
+    DeviceSubtitleOverlay overlay) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   const int chroma_width = width / 2;
@@ -215,6 +235,12 @@ __global__ void subtitleRectChromaKernel(
     current_v = blended_v;
   }
 
+  const float overlay_alpha = sampleOverlayAlpha(overlay, full_x, full_y);
+  if (overlay_alpha > 0.0f) {
+    current_u = mixFloat(current_u, normalizeByte(overlay.chroma_u), overlay_alpha);
+    current_v = mixFloat(current_v, normalizeByte(overlay.chroma_v), overlay_alpha);
+  }
+
   uint8_t* row = output_uv + y * pitch_uv + x * 2;
   row[0] = denormalizeByte(current_u);
   row[1] = denormalizeByte(current_v);
@@ -227,6 +253,7 @@ void CudaSubtitleRectEffect::apply(
     const AVFrame* previous_frame,
     AVFrame* output_frame,
     const std::vector<Region>& active_regions,
+    const DeviceSubtitleOverlay& text_overlay,
     cudaStream_t stream) const {
   const int width = source_frame->width;
   const int height = source_frame->height;
@@ -297,7 +324,8 @@ void CudaSubtitleRectEffect::apply(
       source_frame->linesize[0],
       width,
       height,
-      region_count);
+      region_count,
+      text_overlay);
   dim3 chroma_grid(((width / 2) + block.x - 1) / block.x, ((height / 2) + block.y - 1) / block.y);
   subtitleRectChromaKernel<<<chroma_grid, block, 0, stream>>>(
       source_uv,
@@ -306,7 +334,8 @@ void CudaSubtitleRectEffect::apply(
       source_frame->linesize[1],
       width,
       height,
-      region_count);
+      region_count,
+      text_overlay);
   throwOnCudaError(cudaGetLastError(), "Subtitle rectangle NV12 CUDA kernel failed");
 }
 

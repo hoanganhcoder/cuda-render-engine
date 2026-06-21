@@ -52,8 +52,11 @@ set(VIDEO_ENGINE_SOURCES
   src/core/Logger.cpp
   src/core/RenderEngine.cpp
   src/core/RenderJob.cpp
+  src/core/SrtParser.cpp
+  src/core/SubtitleRenderer.cpp
   src/codec/FFmpegDecoder.cpp
   src/codec/FFmpegEncoder.cpp
+  src/cuda/CudaBuffer.cpp
   src/cuda/CudaContext.cpp
 )
 

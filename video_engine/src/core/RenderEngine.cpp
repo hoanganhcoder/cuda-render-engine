@@ -7,6 +7,8 @@
 #include <libavutil/hwcontext.h>
 
 #include "core/Logger.h"
+#include "core/SrtParser.h"
+#include "core/SubtitleRenderer.h"
 
 namespace video_engine {
 
@@ -23,6 +25,16 @@ bool RenderEngine::render(const RenderJob& input_job) {
     FFmpegEncoder encoder;
     AVFrame* decoded_frame = nullptr;
     double timestamp_seconds = 0.0;
+    std::vector<SubtitleCue> subtitle_cues;
+    SubtitleOverlay current_overlay;
+    std::string current_cue_text;
+    double current_cue_start = -1.0;
+
+    if (!job.subtitle_srt.empty()) {
+      subtitle_cues = SrtParser::parseFile(job.subtitle_srt);
+    } else if (!job.subtitle_text.empty()) {
+      subtitle_cues.push_back(SubtitleCue{0.0, 1.0e12, job.subtitle_text});
+    }
 
     decoder.open(job.input);
     if (job.width <= 0) {
@@ -62,11 +74,46 @@ bool RenderEngine::render(const RenderJob& input_job) {
       }
 
       const std::vector<Region> active_regions = collectActiveRegions(job, timestamp_seconds);
+      const SubtitleCue* active_cue = findActiveCue(subtitle_cues, timestamp_seconds);
+      if (active_cue) {
+        if (active_cue->text != current_cue_text || active_cue->start != current_cue_start ||
+            (!current_overlay.enabled && !active_regions.empty())) {
+          current_overlay = buildSubtitleOverlay(job, active_regions, active_cue);
+          current_cue_text = active_cue->text;
+          current_cue_start = active_cue->start;
+          if (current_overlay.enabled) {
+            subtitle_mask_buffer_.upload(current_overlay.alpha_mask, cuda_context_.stream());
+          } else {
+            subtitle_mask_buffer_.release();
+          }
+        }
+      } else {
+        current_overlay = SubtitleOverlay{};
+        current_cue_text.clear();
+        current_cue_start = -1.0;
+        subtitle_mask_buffer_.release();
+      }
+
+      DeviceSubtitleOverlay device_overlay{};
+      if (current_overlay.enabled && subtitle_mask_buffer_.allocated()) {
+        device_overlay.alpha_mask = subtitle_mask_buffer_.data();
+        device_overlay.x = current_overlay.x;
+        device_overlay.y = current_overlay.y;
+        device_overlay.width = current_overlay.width;
+        device_overlay.height = current_overlay.height;
+        device_overlay.stride = current_overlay.stride;
+        device_overlay.luma = current_overlay.luma;
+        device_overlay.chroma_u = current_overlay.chroma_u;
+        device_overlay.chroma_v = current_overlay.chroma_v;
+        device_overlay.opacity = current_overlay.opacity;
+      }
+
       subtitle_effect_.apply(
           decoded_frame,
           frame_index > 0 ? previous_frame : nullptr,
           output_frame,
           active_regions,
+          device_overlay,
           cuda_context_.stream());
       output_frame->format = AV_PIX_FMT_CUDA;
       output_frame->width = job.width;
@@ -108,6 +155,32 @@ std::vector<Region> RenderEngine::collectActiveRegions(const RenderJob& job, dou
     }
   }
   return active_regions;
+}
+
+const SubtitleCue* RenderEngine::findActiveCue(const std::vector<SubtitleCue>& cues, double timestamp) const {
+  for (const SubtitleCue& cue : cues) {
+    if (cue.isActive(timestamp)) {
+      return &cue;
+    }
+  }
+  return nullptr;
+}
+
+SubtitleOverlay RenderEngine::buildSubtitleOverlay(
+    const RenderJob& job,
+    const std::vector<Region>& active_regions,
+    const SubtitleCue* active_cue) const {
+  if (active_cue == nullptr || active_regions.empty()) {
+    return SubtitleOverlay{};
+  }
+  return SubtitleRenderer::buildOverlay(
+      active_regions.front(),
+      active_cue->text,
+      job.width,
+      job.height,
+      job.subtitle_font_scale,
+      job.subtitle_margin,
+      job.subtitle_opacity);
 }
 
 AVFrame* RenderEngine::allocateHardwareFrame(AVBufferRef* hw_frames_context, int width, int height) const {

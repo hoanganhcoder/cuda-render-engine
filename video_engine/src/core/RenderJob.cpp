@@ -50,6 +50,11 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.width = optionalValue<int>(job_dict, "width", 0);
   job.height = optionalValue<int>(job_dict, "height", 0);
   job.fps = optionalValue<double>(job_dict, "fps", 0.0);
+  job.subtitle_srt = optionalValue<std::string>(job_dict, "subtitle_srt", "");
+  job.subtitle_text = optionalValue<std::string>(job_dict, "subtitle_text", "");
+  job.subtitle_font_scale = optionalValue<int>(job_dict, "subtitle_font_scale", 4);
+  job.subtitle_margin = optionalValue<int>(job_dict, "subtitle_margin", 8);
+  job.subtitle_opacity = optionalValue<float>(job_dict, "subtitle_opacity", 1.0f);
 
   if (job_dict.contains("regions") && !job_dict["regions"].is_none()) {
     py::list region_list = py::cast<py::list>(job_dict["regions"]);
@@ -75,6 +80,15 @@ void RenderJob::validate() const {
   }
   if (fps < 0.0) {
     throw std::runtime_error("Job fps must be >= 0.");
+  }
+  if (subtitle_font_scale < 1) {
+    throw std::runtime_error("subtitle_font_scale must be >= 1.");
+  }
+  if (subtitle_margin < 0) {
+    throw std::runtime_error("subtitle_margin must be >= 0.");
+  }
+  if (subtitle_opacity < 0.0f || subtitle_opacity > 1.0f) {
+    throw std::runtime_error("subtitle_opacity must be within [0, 1].");
   }
 
   for (const Region& region : regions) {
