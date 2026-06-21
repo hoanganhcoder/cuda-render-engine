@@ -162,7 +162,11 @@ SubtitleOverlay SubtitleRenderer::buildOverlay(
   overlay.opacity = std::clamp(opacity, 0.0f, 1.0f);
   overlay.enabled = overlay.width > 0 && overlay.height > 0;
   overlay.cue_text = text;
-  overlay.alpha_mask.assign(static_cast<size_t>(overlay.width) * static_cast<size_t>(overlay.height), 0);
+  const size_t pixel_count = static_cast<size_t>(overlay.width) * static_cast<size_t>(overlay.height);
+  overlay.alpha_mask.assign(pixel_count, 0);
+  overlay.luma_mask.assign(pixel_count, 235);
+  overlay.chroma_u_mask.assign(pixel_count, 128);
+  overlay.chroma_v_mask.assign(pixel_count, 128);
 
   for (size_t line_index = 0; line_index < lines.size(); ++line_index) {
     const std::string& line = lines[line_index];

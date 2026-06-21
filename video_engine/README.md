@@ -114,6 +114,12 @@ job = {
     "subtitle_back_color": "#00000000",
     "subtitle_outline": 4,
     "subtitle_shadow": 0,
+    "watermark_text": "@hoanganhcoder",
+    "watermark_font_size": 26,
+    "watermark_text_color": "#FFFFFF80",
+    "watermark_outline_color": "#00000030",
+    "watermark_bounce": True,
+    "watermark_opacity": 0.2,
     "regions": [
         {
             "start": 1.2,
@@ -152,6 +158,19 @@ Hard subtitle inputs supported now:
 - `subtitle_font_scale`: integer bitmap font scale, default `4`
 - `subtitle_margin`: inner padding inside the active fill region
 - `subtitle_opacity`: subtitle text opacity in `[0, 1]`
+- `logo_path`: optional logo image path, e.g. PNG with alpha
+- `logo_scale`: logo width as a fraction of video width
+- `logo_opacity`: logo opacity in `[0, 1]`
+- `logo_bounce`: move logo diagonally and bounce off edges
+- `logo_speed_x`, `logo_speed_y`: logo motion speed in pixels/sec
+- `watermark_text` or `text_logo`: optional transparent watermark text
+- `watermark_font_size`: watermark font size
+- `watermark_text_color`: watermark color in `#RRGGBB` or `#RRGGBBAA`
+- `watermark_outline_color`: watermark outline color
+- `watermark_back_color`: watermark background color
+- `watermark_bounce`: move watermark text diagonally and bounce off edges
+- `watermark_speed_x`, `watermark_speed_y`: watermark motion speed in pixels/sec
+- `watermark_opacity`: watermark opacity in `[0, 1]`
 
 Subtitle rendering path:
 

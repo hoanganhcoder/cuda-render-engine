@@ -67,6 +67,7 @@ set(VIDEO_ENGINE_SOURCES
   src/core/RenderJob.cpp
   src/core/SrtParser.cpp
   src/core/SubtitleRenderer.cpp
+  src/core/WatermarkRenderer.cpp
   src/codec/FFmpegDecoder.cpp
   src/codec/FFmpegEncoder.cpp
   src/cuda/CudaBuffer.cpp

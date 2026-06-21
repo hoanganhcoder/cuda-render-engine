@@ -25,6 +25,17 @@ T optionalValue(const py::dict& dict, const char* key, T fallback) {
   return py::cast<T>(dict[key]);
 }
 
+template <typename T>
+T optionalAliasValue(const py::dict& dict, const char* primary_key, const char* alias_key, T fallback) {
+  if (dict.contains(primary_key) && !dict[primary_key].is_none()) {
+    return py::cast<T>(dict[primary_key]);
+  }
+  if (dict.contains(alias_key) && !dict[alias_key].is_none()) {
+    return py::cast<T>(dict[alias_key]);
+  }
+  return fallback;
+}
+
 Region parseRegion(const py::handle& handle) {
   py::dict dict = py::cast<py::dict>(handle);
   Region region;
@@ -66,6 +77,29 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.subtitle_bold = optionalValue<bool>(job_dict, "subtitle_bold", true);
   job.subtitle_italic = optionalValue<bool>(job_dict, "subtitle_italic", false);
   job.subtitle_opacity = optionalValue<float>(job_dict, "subtitle_opacity", 1.0f);
+  job.logo_path = optionalValue<std::string>(job_dict, "logo_path", "");
+  job.logo_scale = optionalValue<float>(job_dict, "logo_scale", 0.18f);
+  job.logo_opacity = optionalValue<float>(job_dict, "logo_opacity", 0.22f);
+  job.logo_margin = optionalValue<int>(job_dict, "logo_margin", 24);
+  job.logo_bounce = optionalValue<bool>(job_dict, "logo_bounce", false);
+  job.logo_speed_x = optionalValue<float>(job_dict, "logo_speed_x", 72.0f);
+  job.logo_speed_y = optionalValue<float>(job_dict, "logo_speed_y", 48.0f);
+  job.watermark_text = optionalAliasValue<std::string>(job_dict, "watermark_text", "text_logo", "");
+  job.watermark_font_family = optionalValue<std::string>(job_dict, "watermark_font_family", "Noto Sans");
+  job.watermark_font_path = optionalValue<std::string>(job_dict, "watermark_font_path", "");
+  job.watermark_text_color = optionalValue<std::string>(job_dict, "watermark_text_color", "#FFFFFF80");
+  job.watermark_outline_color = optionalValue<std::string>(job_dict, "watermark_outline_color", "#00000020");
+  job.watermark_back_color = optionalValue<std::string>(job_dict, "watermark_back_color", "#00000000");
+  job.watermark_font_size = optionalValue<int>(job_dict, "watermark_font_size", 28);
+  job.watermark_outline = optionalValue<int>(job_dict, "watermark_outline", 1);
+  job.watermark_shadow = optionalValue<int>(job_dict, "watermark_shadow", 0);
+  job.watermark_margin = optionalValue<int>(job_dict, "watermark_margin", 24);
+  job.watermark_bold = optionalValue<bool>(job_dict, "watermark_bold", true);
+  job.watermark_italic = optionalValue<bool>(job_dict, "watermark_italic", false);
+  job.watermark_bounce = optionalAliasValue<bool>(job_dict, "watermark_bounce", "text_logo_bounce", false);
+  job.watermark_speed_x = optionalValue<float>(job_dict, "watermark_speed_x", 96.0f);
+  job.watermark_speed_y = optionalValue<float>(job_dict, "watermark_speed_y", 64.0f);
+  job.watermark_opacity = optionalAliasValue<float>(job_dict, "watermark_opacity", "text_logo_opacity", 0.18f);
 
   if (job_dict.contains("regions") && !job_dict["regions"].is_none()) {
     py::list region_list = py::cast<py::list>(job_dict["regions"]);
@@ -123,6 +157,27 @@ void RenderJob::validate() const {
   if (subtitle_shadow < 0) {
     throw std::runtime_error("subtitle_shadow must be >= 0.");
   }
+  if (logo_scale <= 0.0f) {
+    throw std::runtime_error("logo_scale must be > 0.");
+  }
+  if (logo_margin < 0) {
+    throw std::runtime_error("logo_margin must be >= 0.");
+  }
+  if (logo_opacity < 0.0f || logo_opacity > 1.0f) {
+    throw std::runtime_error("logo_opacity must be within [0, 1].");
+  }
+  if (watermark_font_size < 1) {
+    throw std::runtime_error("watermark_font_size must be >= 1.");
+  }
+  if (watermark_outline < 0) {
+    throw std::runtime_error("watermark_outline must be >= 0.");
+  }
+  if (watermark_shadow < 0) {
+    throw std::runtime_error("watermark_shadow must be >= 0.");
+  }
+  if (watermark_margin < 0) {
+    throw std::runtime_error("watermark_margin must be >= 0.");
+  }
   if (!isValidHexColor(subtitle_text_color)) {
     throw std::runtime_error("subtitle_text_color must be in #RRGGBB or #RRGGBBAA format.");
   }
@@ -132,8 +187,20 @@ void RenderJob::validate() const {
   if (!isValidHexColor(subtitle_back_color)) {
     throw std::runtime_error("subtitle_back_color must be in #RRGGBB or #RRGGBBAA format.");
   }
+  if (!isValidHexColor(watermark_text_color)) {
+    throw std::runtime_error("watermark_text_color must be in #RRGGBB or #RRGGBBAA format.");
+  }
+  if (!isValidHexColor(watermark_outline_color)) {
+    throw std::runtime_error("watermark_outline_color must be in #RRGGBB or #RRGGBBAA format.");
+  }
+  if (!isValidHexColor(watermark_back_color)) {
+    throw std::runtime_error("watermark_back_color must be in #RRGGBB or #RRGGBBAA format.");
+  }
   if (subtitle_opacity < 0.0f || subtitle_opacity > 1.0f) {
     throw std::runtime_error("subtitle_opacity must be within [0, 1].");
+  }
+  if (watermark_opacity < 0.0f || watermark_opacity > 1.0f) {
+    throw std::runtime_error("watermark_opacity must be within [0, 1].");
   }
 
   for (const Region& region : regions) {
