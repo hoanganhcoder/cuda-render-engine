@@ -39,6 +39,7 @@ public:
       const AVFrame* previous_frame,
       AVFrame* output_frame,
       const std::vector<Region>& active_regions,
+      bool gaussian_blur,
       const DeviceSubtitleOverlay& text_overlay,
       cudaStream_t stream) const;
 };

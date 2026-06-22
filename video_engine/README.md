@@ -104,73 +104,70 @@ import video_engine
 job = {
     "input": "input.mp4",
     "output": "output.mp4",
-    "subtitle_srt": "examples/sample.srt",
-    "subtitle_font_family": "Noto Sans",
-    "subtitle_font_size": 48,
-    "subtitle_bold": True,
-    "subtitle_italic": False,
-    "subtitle_text_color": "#FFF200",
-    "subtitle_outline_color": "#101010",
-    "subtitle_back_color": "#00000000",
-    "subtitle_outline": 4,
-    "subtitle_shadow": 0,
-    "watermark_text": "@hoanganhcoder",
-    "watermark_font_size": 26,
-    "watermark_text_color": "#FFFFFF80",
-    "watermark_outline_color": "#00000030",
-    "watermark_bounce": True,
-    "watermark_opacity": 0.2,
-    "regions": [
-        {
-            "start": 1.2,
-            "end": 4.8,
-            "x": 0,
-            "y": 610,
-            "w": 1280,
-            "h": 90,
-            "strength": 0.85,
-            "feather": 45,
-            "vertical_stretch": 1.0,
-            "horizontal_blur": 0.25,
-            "temporal_blend": 0.18,
-        }
-    ],
+    "subtitle": {
+        "srt": "examples/sample.srt",
+        "gaussian_blur": True,
+        "font": "Noto Sans",
+        "size": 48,
+        "bold": True,
+        "italic": False,
+        "color": "#FFF200",
+        "outline_color": "#101010",
+        "back_color": "#00000000",
+        "outline": 4,
+        "shadow": 0,
+        "margin": 12,
+        "regions": [
+            {
+                "start": 1.2,
+                "end": 4.8,
+                "x": 0,
+                "y": 610,
+                "w": 1280,
+                "h": 90,
+                "strength": 0.85,
+                "feather": 36,
+                "vertical_stretch": 1.0,
+                "horizontal_blur": 0.4,
+                "temporal_blend": 0.18,
+            }
+        ],
+    },
+    "watermark": {
+        "text": "@hoanganhcoder",
+        "font": "Noto Sans",
+        "size": 30,
+        "bold": True,
+        "color": "#FFFFFF",
+        "outline_color": "#000000",
+        "bounce": True,
+        "opacity": 0.28,
+    },
+    "logo": {
+        "path": "logo.png",
+        "scale": 0.16,
+        "opacity": 0.24,
+    },
 }
 
 print(video_engine.version())
 print(video_engine.render(job))
 ```
 
-Hard subtitle inputs supported now:
+Nested job layout:
 
-- `subtitle_srt`: path to an `.srt` file
-- `subtitle_text`: single always-on text string
-- `subtitle_font_family`: preferred font family, e.g. `Noto Sans`, `DejaVu Sans`
-- `subtitle_font_path`: optional explicit font file path
-- `subtitle_font_size`: font size for libass renderer
-- `subtitle_text_color`: main text color in `#RRGGBB` or `#RRGGBBAA`
-- `subtitle_outline_color`: outline color in `#RRGGBB` or `#RRGGBBAA`
-- `subtitle_back_color`: ASS background/box color in `#RRGGBB` or `#RRGGBBAA`
-- `subtitle_bold`: bold text on/off
-- `subtitle_italic`: italic text on/off
-- `subtitle_outline`: outline thickness
-- `subtitle_shadow`: shadow size
-- `subtitle_font_scale`: integer bitmap font scale, default `4`
-- `subtitle_margin`: inner padding inside the active fill region
-- `subtitle_opacity`: subtitle text opacity in `[0, 1]`
-- `logo_path`: optional logo image path, e.g. PNG with alpha
-- `logo_scale`: logo width as a fraction of video width
-- `logo_opacity`: logo opacity in `[0, 1]`
-- `logo_bounce`: move logo diagonally and bounce off edges
-- `logo_speed_x`, `logo_speed_y`: logo motion speed in pixels/sec
-- `watermark_text` or `text_logo`: optional transparent watermark text
-- `watermark_font_size`: watermark font size
-- `watermark_text_color`: watermark color in `#RRGGBB` or `#RRGGBBAA`
-- `watermark_outline_color`: watermark outline color
-- `watermark_back_color`: watermark background color
-- `watermark_bounce`: move watermark text diagonally and bounce off edges
-- `watermark_speed_x`, `watermark_speed_y`: watermark motion speed in pixels/sec
-- `watermark_opacity`: watermark opacity in `[0, 1]`
+- `subtitle.srt` or `subtitle.text`: subtitle source
+- `subtitle.font` or `subtitle.font_ttf`: system font name or explicit `.ttf`
+- `subtitle.size`, `subtitle.bold`, `subtitle.italic`, `subtitle.color`
+- `subtitle.outline_color`, `subtitle.back_color`, `subtitle.outline`, `subtitle.shadow`
+- `subtitle.gaussian_blur`: enable Gaussian blur over subtitle regions
+- `subtitle.regions`: list of blur regions with `x/y/w/h/start/end/...`
+- `watermark.text`: transparent text watermark
+- `watermark.font` or `watermark.font_ttf`: system font name or explicit `.ttf`
+- `watermark.color`, `watermark.outline_color`, `watermark.opacity`
+- `watermark.bounce`, `watermark.speed_x`, `watermark.speed_y`
+- `logo.path`: optional logo image path
+- `logo.scale`, `logo.opacity`, `logo.bounce`, `logo.speed_x`, `logo.speed_y`
 
 Subtitle rendering path:
 
@@ -201,7 +198,7 @@ fall back to decoder values if omitted or set to `0`.
 ## Limitations
 
 - The first zero-copy implementation is tuned for `NV12` surfaces only.
-- The subtitle effect is specialized for soft subtitle-region fill/blur, not a full compositor yet.
+- The subtitle effect is now a GPU Gaussian blur over the configured subtitle region, not a full compositor yet.
 - Decoder and encoder expect a stable output resolution.
 - Cross-platform FFmpeg CUDA builds can differ in hwaccel behavior and available codecs.
 

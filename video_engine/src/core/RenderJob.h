@@ -15,6 +15,7 @@ struct RenderJob {
   int width = 0;
   int height = 0;
   double fps = 0.0;
+  bool subtitle_gaussian_blur = true;
   std::string subtitle_srt;
   std::string subtitle_text;
   std::string subtitle_font_family = "Noto Sans";
@@ -40,8 +41,8 @@ struct RenderJob {
   std::string watermark_text;
   std::string watermark_font_family = "Noto Sans";
   std::string watermark_font_path;
-  std::string watermark_text_color = "#FFFFFF80";
-  std::string watermark_outline_color = "#00000020";
+  std::string watermark_text_color = "#FFFFFF";
+  std::string watermark_outline_color = "#000000";
   std::string watermark_back_color = "#00000000";
   int watermark_font_size = 28;
   int watermark_outline = 1;
@@ -52,7 +53,7 @@ struct RenderJob {
   bool watermark_bounce = false;
   float watermark_speed_x = 96.0f;
   float watermark_speed_y = 64.0f;
-  float watermark_opacity = 0.18f;
+  float watermark_opacity = 0.28f;
   std::vector<Region> regions;
 
   static RenderJob fromPythonDict(const pybind11::dict& job_dict);

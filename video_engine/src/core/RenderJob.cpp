@@ -36,6 +36,41 @@ T optionalAliasValue(const py::dict& dict, const char* primary_key, const char* 
   return fallback;
 }
 
+py::dict optionalDict(const py::dict& dict, const char* key) {
+  if (!dict.contains(key) || dict[key].is_none()) {
+    return py::dict();
+  }
+  return py::cast<py::dict>(dict[key]);
+}
+
+template <typename T>
+T optionalScopedValue(const py::dict& scoped_dict, const py::dict& root_dict, const char* scoped_key, const char* root_key, T fallback) {
+  if (!scoped_dict.empty() && scoped_dict.contains(scoped_key) && !scoped_dict[scoped_key].is_none()) {
+    return py::cast<T>(scoped_dict[scoped_key]);
+  }
+  return optionalValue<T>(root_dict, root_key, fallback);
+}
+
+template <typename T>
+T optionalScopedAliasValue(
+    const py::dict& scoped_dict,
+    const py::dict& root_dict,
+    const char* scoped_key,
+    const char* scoped_alias_key,
+    const char* root_key,
+    const char* root_alias_key,
+    T fallback) {
+  if (!scoped_dict.empty()) {
+    if (scoped_dict.contains(scoped_key) && !scoped_dict[scoped_key].is_none()) {
+      return py::cast<T>(scoped_dict[scoped_key]);
+    }
+    if (scoped_dict.contains(scoped_alias_key) && !scoped_dict[scoped_alias_key].is_none()) {
+      return py::cast<T>(scoped_dict[scoped_alias_key]);
+    }
+  }
+  return optionalAliasValue<T>(root_dict, root_key, root_alias_key, fallback);
+}
+
 Region parseRegion(const py::handle& handle) {
   py::dict dict = py::cast<py::dict>(handle);
   Region region;
@@ -57,51 +92,64 @@ Region parseRegion(const py::handle& handle) {
 
 RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   RenderJob job;
+  const py::dict subtitle_dict = optionalDict(job_dict, "subtitle");
+  const py::dict watermark_dict = optionalDict(job_dict, "watermark");
+  const py::dict logo_dict = optionalDict(job_dict, "logo");
+
   job.input = requiredValue<std::string>(job_dict, "input");
   job.output = requiredValue<std::string>(job_dict, "output");
   job.width = optionalValue<int>(job_dict, "width", 0);
   job.height = optionalValue<int>(job_dict, "height", 0);
   job.fps = optionalValue<double>(job_dict, "fps", 0.0);
-  job.subtitle_srt = optionalValue<std::string>(job_dict, "subtitle_srt", "");
-  job.subtitle_text = optionalValue<std::string>(job_dict, "subtitle_text", "");
-  job.subtitle_font_family = optionalValue<std::string>(job_dict, "subtitle_font_family", "Noto Sans");
-  job.subtitle_font_path = optionalValue<std::string>(job_dict, "subtitle_font_path", "");
-  job.subtitle_text_color = optionalValue<std::string>(job_dict, "subtitle_text_color", "#FFF200");
-  job.subtitle_outline_color = optionalValue<std::string>(job_dict, "subtitle_outline_color", "#101010");
-  job.subtitle_back_color = optionalValue<std::string>(job_dict, "subtitle_back_color", "#00000000");
-  job.subtitle_font_scale = optionalValue<int>(job_dict, "subtitle_font_scale", 4);
-  job.subtitle_font_size = optionalValue<int>(job_dict, "subtitle_font_size", 36);
-  job.subtitle_margin = optionalValue<int>(job_dict, "subtitle_margin", 8);
-  job.subtitle_outline = optionalValue<int>(job_dict, "subtitle_outline", 3);
-  job.subtitle_shadow = optionalValue<int>(job_dict, "subtitle_shadow", 0);
-  job.subtitle_bold = optionalValue<bool>(job_dict, "subtitle_bold", true);
-  job.subtitle_italic = optionalValue<bool>(job_dict, "subtitle_italic", false);
-  job.subtitle_opacity = optionalValue<float>(job_dict, "subtitle_opacity", 1.0f);
-  job.logo_path = optionalValue<std::string>(job_dict, "logo_path", "");
-  job.logo_scale = optionalValue<float>(job_dict, "logo_scale", 0.18f);
-  job.logo_opacity = optionalValue<float>(job_dict, "logo_opacity", 0.22f);
-  job.logo_margin = optionalValue<int>(job_dict, "logo_margin", 24);
-  job.logo_bounce = optionalValue<bool>(job_dict, "logo_bounce", false);
-  job.logo_speed_x = optionalValue<float>(job_dict, "logo_speed_x", 72.0f);
-  job.logo_speed_y = optionalValue<float>(job_dict, "logo_speed_y", 48.0f);
-  job.watermark_text = optionalAliasValue<std::string>(job_dict, "watermark_text", "text_logo", "");
-  job.watermark_font_family = optionalValue<std::string>(job_dict, "watermark_font_family", "Noto Sans");
-  job.watermark_font_path = optionalValue<std::string>(job_dict, "watermark_font_path", "");
-  job.watermark_text_color = optionalValue<std::string>(job_dict, "watermark_text_color", "#FFFFFF80");
-  job.watermark_outline_color = optionalValue<std::string>(job_dict, "watermark_outline_color", "#00000020");
-  job.watermark_back_color = optionalValue<std::string>(job_dict, "watermark_back_color", "#00000000");
-  job.watermark_font_size = optionalValue<int>(job_dict, "watermark_font_size", 28);
-  job.watermark_outline = optionalValue<int>(job_dict, "watermark_outline", 1);
-  job.watermark_shadow = optionalValue<int>(job_dict, "watermark_shadow", 0);
-  job.watermark_margin = optionalValue<int>(job_dict, "watermark_margin", 24);
-  job.watermark_bold = optionalValue<bool>(job_dict, "watermark_bold", true);
-  job.watermark_italic = optionalValue<bool>(job_dict, "watermark_italic", false);
-  job.watermark_bounce = optionalAliasValue<bool>(job_dict, "watermark_bounce", "text_logo_bounce", false);
-  job.watermark_speed_x = optionalValue<float>(job_dict, "watermark_speed_x", 96.0f);
-  job.watermark_speed_y = optionalValue<float>(job_dict, "watermark_speed_y", 64.0f);
-  job.watermark_opacity = optionalAliasValue<float>(job_dict, "watermark_opacity", "text_logo_opacity", 0.18f);
+  job.subtitle_gaussian_blur = optionalScopedValue<bool>(subtitle_dict, job_dict, "gaussian_blur", "subtitle_gaussian_blur", true);
+  job.subtitle_srt = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "srt", "subtitle_srt", "subtitle_srt", "subtitle_srt", "");
+  job.subtitle_text = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "text", "subtitle_text", "subtitle_text", "subtitle_text", "");
+  job.subtitle_font_family = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "font", "font_family", "subtitle_font_family", "subtitle_font_family", "Noto Sans");
+  job.subtitle_font_path = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "font_ttf", "font_path", "subtitle_font_path", "subtitle_font_path", "");
+  job.subtitle_text_color = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "color", "text_color", "subtitle_text_color", "subtitle_text_color", "#FFF200");
+  job.subtitle_outline_color = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "outline_color", "stroke_color", "subtitle_outline_color", "subtitle_outline_color", "#101010");
+  job.subtitle_back_color = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "back_color", "background_color", "subtitle_back_color", "subtitle_back_color", "#00000000");
+  job.subtitle_font_scale = optionalScopedValue<int>(subtitle_dict, job_dict, "font_scale", "subtitle_font_scale", 4);
+  job.subtitle_font_size = optionalScopedAliasValue<int>(subtitle_dict, job_dict, "size", "font_size", "subtitle_font_size", "subtitle_font_size", 36);
+  job.subtitle_margin = optionalScopedValue<int>(subtitle_dict, job_dict, "margin", "subtitle_margin", 8);
+  job.subtitle_outline = optionalScopedAliasValue<int>(subtitle_dict, job_dict, "outline", "stroke", "subtitle_outline", "subtitle_outline", 3);
+  job.subtitle_shadow = optionalScopedValue<int>(subtitle_dict, job_dict, "shadow", "subtitle_shadow", 0);
+  job.subtitle_bold = optionalScopedValue<bool>(subtitle_dict, job_dict, "bold", "subtitle_bold", true);
+  job.subtitle_italic = optionalScopedAliasValue<bool>(subtitle_dict, job_dict, "italic", "i", "subtitle_italic", "subtitle_italic", false);
+  job.subtitle_opacity = optionalScopedValue<float>(subtitle_dict, job_dict, "opacity", "subtitle_opacity", 1.0f);
 
-  if (job_dict.contains("regions") && !job_dict["regions"].is_none()) {
+  job.logo_path = optionalScopedAliasValue<std::string>(logo_dict, job_dict, "path", "logo_path", "logo_path", "logo_path", "");
+  job.logo_scale = optionalScopedValue<float>(logo_dict, job_dict, "scale", "logo_scale", 0.18f);
+  job.logo_opacity = optionalScopedValue<float>(logo_dict, job_dict, "opacity", "logo_opacity", 0.22f);
+  job.logo_margin = optionalScopedValue<int>(logo_dict, job_dict, "margin", "logo_margin", 24);
+  job.logo_bounce = optionalScopedValue<bool>(logo_dict, job_dict, "bounce", "logo_bounce", false);
+  job.logo_speed_x = optionalScopedValue<float>(logo_dict, job_dict, "speed_x", "logo_speed_x", 72.0f);
+  job.logo_speed_y = optionalScopedValue<float>(logo_dict, job_dict, "speed_y", "logo_speed_y", 48.0f);
+
+  job.watermark_text = optionalScopedAliasValue<std::string>(watermark_dict, job_dict, "text", "text_logo", "watermark_text", "text_logo", "");
+  job.watermark_font_family = optionalScopedAliasValue<std::string>(watermark_dict, job_dict, "font", "font_family", "watermark_font_family", "watermark_font_family", "Noto Sans");
+  job.watermark_font_path = optionalScopedAliasValue<std::string>(watermark_dict, job_dict, "font_ttf", "font_path", "watermark_font_path", "watermark_font_path", "");
+  job.watermark_text_color = optionalScopedAliasValue<std::string>(watermark_dict, job_dict, "color", "text_color", "watermark_text_color", "watermark_text_color", "#FFFFFF");
+  job.watermark_outline_color = optionalScopedAliasValue<std::string>(watermark_dict, job_dict, "outline_color", "stroke_color", "watermark_outline_color", "watermark_outline_color", "#000000");
+  job.watermark_back_color = optionalScopedAliasValue<std::string>(watermark_dict, job_dict, "back_color", "background_color", "watermark_back_color", "watermark_back_color", "#00000000");
+  job.watermark_font_size = optionalScopedAliasValue<int>(watermark_dict, job_dict, "size", "font_size", "watermark_font_size", "watermark_font_size", 28);
+  job.watermark_outline = optionalScopedAliasValue<int>(watermark_dict, job_dict, "outline", "stroke", "watermark_outline", "watermark_outline", 1);
+  job.watermark_shadow = optionalScopedValue<int>(watermark_dict, job_dict, "shadow", "watermark_shadow", 0);
+  job.watermark_margin = optionalScopedValue<int>(watermark_dict, job_dict, "margin", "watermark_margin", 24);
+  job.watermark_bold = optionalScopedValue<bool>(watermark_dict, job_dict, "bold", "watermark_bold", true);
+  job.watermark_italic = optionalScopedAliasValue<bool>(watermark_dict, job_dict, "italic", "i", "watermark_italic", "watermark_italic", false);
+  job.watermark_bounce = optionalScopedAliasValue<bool>(watermark_dict, job_dict, "bounce", "text_logo_bounce", "watermark_bounce", "text_logo_bounce", false);
+  job.watermark_speed_x = optionalScopedValue<float>(watermark_dict, job_dict, "speed_x", "watermark_speed_x", 96.0f);
+  job.watermark_speed_y = optionalScopedValue<float>(watermark_dict, job_dict, "speed_y", "watermark_speed_y", 64.0f);
+  job.watermark_opacity = optionalScopedAliasValue<float>(watermark_dict, job_dict, "opacity", "text_logo_opacity", "watermark_opacity", "text_logo_opacity", 0.28f);
+
+  if (!subtitle_dict.empty() && subtitle_dict.contains("regions") && !subtitle_dict["regions"].is_none()) {
+    py::list region_list = py::cast<py::list>(subtitle_dict["regions"]);
+    job.regions.reserve(region_list.size());
+    for (const py::handle& item : region_list) {
+      job.regions.push_back(parseRegion(item));
+    }
+  } else if (job_dict.contains("regions") && !job_dict["regions"].is_none()) {
     py::list region_list = py::cast<py::list>(job_dict["regions"]);
     job.regions.reserve(region_list.size());
     for (const py::handle& item : region_list) {

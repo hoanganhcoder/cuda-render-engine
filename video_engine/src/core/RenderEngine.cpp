@@ -224,6 +224,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
           frame_index > 0 ? previous_frame : nullptr,
           output_frame,
           active_regions,
+          job.subtitle_gaussian_blur,
           device_overlay,
           cuda_context_.stream());
       output_frame->format = AV_PIX_FMT_CUDA;
