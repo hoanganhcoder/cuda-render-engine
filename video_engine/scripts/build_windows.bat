@@ -78,6 +78,17 @@ echo [INFO] Generator  : %GENERATOR%
 
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 
+set "CACHE_FILE=%BUILD_DIR%\CMakeCache.txt"
+if exist "%CACHE_FILE%" (
+  findstr /I /C:"CMAKE_HOME_DIRECTORY:INTERNAL=%REPO_ROOT:\=/%" "%CACHE_FILE%" >nul 2>nul
+  if errorlevel 1 (
+    echo [WARN] Existing CMake cache was created from a different source path.
+    echo [WARN] Removing stale build directory: %BUILD_DIR%
+    rmdir /s /q "%BUILD_DIR%"
+    mkdir "%BUILD_DIR%"
+  )
+)
+
 cmake -S "%REPO_ROOT%" -B "%BUILD_DIR%" -G "%GENERATOR%" -DCMAKE_BUILD_TYPE=%BUILD_TYPE% %CMAKE_ARGS%
 if errorlevel 1 exit /b 1
 
