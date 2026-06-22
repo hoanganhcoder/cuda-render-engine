@@ -51,6 +51,21 @@ cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build -j
 ```
 
+Windows helper:
+
+```bat
+cd video_engine
+scripts\build_windows.bat
+```
+
+Useful flags:
+
+```bat
+scripts\build_windows.bat --ninja
+scripts\build_windows.bat --vs --debug
+scripts\build_windows.bat --wheel
+```
+
 If you vendor FFmpeg locally, place it under `video_engine/ffmpeg-dev/` with `include/` and `lib/`.
 `CMakeLists.txt` prefers that local tree before falling back to `pkg-config`.
 
