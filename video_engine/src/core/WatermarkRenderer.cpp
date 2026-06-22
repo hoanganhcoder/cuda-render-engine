@@ -325,8 +325,9 @@ std::vector<SubtitleOverlay> WatermarkRenderer::render(double timestamp_seconds)
     const int max_text_width = std::max(impl_->video_width - impl_->source_job.watermark_margin * 2, 1);
     const int min_text_width = std::min(220, max_text_width);
     const int text_box_width = std::clamp(impl_->video_width / 3, min_text_width, max_text_width);
+    const int watermark_font_pixels = impl_->source_job.resolveWatermarkFontPixels(impl_->video_height);
     const int text_box_height =
-        std::clamp(impl_->source_job.watermark_font_size * 3, impl_->source_job.watermark_font_size + 24, impl_->video_height / 4);
+        std::clamp(watermark_font_pixels * 3, watermark_font_pixels + 24, impl_->video_height / 4);
     const Region text_region = makeMotionRegion(
         impl_->video_width,
         impl_->video_height,
@@ -348,7 +349,7 @@ std::vector<SubtitleOverlay> WatermarkRenderer::render(double timestamp_seconds)
           impl_->source_job.watermark_text,
           impl_->video_width,
           impl_->video_height,
-          std::max(1, impl_->source_job.watermark_font_size / 10),
+          std::max(1, watermark_font_pixels / 10),
           std::max(impl_->source_job.watermark_margin / 2, 0),
           impl_->source_job.watermark_opacity);
     }

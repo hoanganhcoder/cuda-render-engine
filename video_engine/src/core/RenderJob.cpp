@@ -110,12 +110,12 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.subtitle_outline_color = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "outline_color", "stroke_color", "subtitle_outline_color", "subtitle_outline_color", "#101010");
   job.subtitle_back_color = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "back_color", "background_color", "subtitle_back_color", "subtitle_back_color", "#00000000");
   job.subtitle_font_scale = optionalScopedValue<int>(subtitle_dict, job_dict, "font_scale", "subtitle_font_scale", 4);
-  job.subtitle_font_size = optionalScopedAliasValue<int>(subtitle_dict, job_dict, "size", "font_size", "subtitle_font_size", "subtitle_font_size", 36);
+  job.subtitle_font_size = optionalScopedAliasValue<float>(subtitle_dict, job_dict, "size", "font_size", "subtitle_font_size", "subtitle_font_size", 1.5f);
   job.subtitle_margin = optionalScopedValue<int>(subtitle_dict, job_dict, "margin", "subtitle_margin", 8);
   job.subtitle_outline = optionalScopedAliasValue<int>(subtitle_dict, job_dict, "outline", "stroke", "subtitle_outline", "subtitle_outline", 3);
   job.subtitle_shadow = optionalScopedValue<int>(subtitle_dict, job_dict, "shadow", "subtitle_shadow", 0);
   job.subtitle_bold = optionalScopedValue<bool>(subtitle_dict, job_dict, "bold", "subtitle_bold", true);
-  job.subtitle_italic = optionalScopedAliasValue<bool>(subtitle_dict, job_dict, "italic", "i", "subtitle_italic", "subtitle_italic", false);
+  job.subtitle_italic = optionalScopedAliasValue<bool>(subtitle_dict, job_dict, "italic", "i", "subtitle_italic", "subtitle_italic", true);
   job.subtitle_opacity = optionalScopedValue<float>(subtitle_dict, job_dict, "opacity", "subtitle_opacity", 1.0f);
 
   job.logo_path = optionalScopedAliasValue<std::string>(logo_dict, job_dict, "path", "logo_path", "logo_path", "logo_path", "");
@@ -132,12 +132,12 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.watermark_text_color = optionalScopedAliasValue<std::string>(watermark_dict, job_dict, "color", "text_color", "watermark_text_color", "watermark_text_color", "#FFFFFF");
   job.watermark_outline_color = optionalScopedAliasValue<std::string>(watermark_dict, job_dict, "outline_color", "stroke_color", "watermark_outline_color", "watermark_outline_color", "#000000");
   job.watermark_back_color = optionalScopedAliasValue<std::string>(watermark_dict, job_dict, "back_color", "background_color", "watermark_back_color", "watermark_back_color", "#00000000");
-  job.watermark_font_size = optionalScopedAliasValue<int>(watermark_dict, job_dict, "size", "font_size", "watermark_font_size", "watermark_font_size", 28);
+  job.watermark_font_size = optionalScopedAliasValue<float>(watermark_dict, job_dict, "size", "font_size", "watermark_font_size", "watermark_font_size", 4.0f);
   job.watermark_outline = optionalScopedAliasValue<int>(watermark_dict, job_dict, "outline", "stroke", "watermark_outline", "watermark_outline", 1);
   job.watermark_shadow = optionalScopedValue<int>(watermark_dict, job_dict, "shadow", "watermark_shadow", 0);
   job.watermark_margin = optionalScopedValue<int>(watermark_dict, job_dict, "margin", "watermark_margin", 24);
   job.watermark_bold = optionalScopedValue<bool>(watermark_dict, job_dict, "bold", "watermark_bold", true);
-  job.watermark_italic = optionalScopedAliasValue<bool>(watermark_dict, job_dict, "italic", "i", "watermark_italic", "watermark_italic", false);
+  job.watermark_italic = optionalScopedAliasValue<bool>(watermark_dict, job_dict, "italic", "i", "watermark_italic", "watermark_italic", true);
   job.watermark_bounce = optionalScopedAliasValue<bool>(watermark_dict, job_dict, "bounce", "text_logo_bounce", "watermark_bounce", "text_logo_bounce", false);
   job.watermark_speed_x = optionalScopedValue<float>(watermark_dict, job_dict, "speed_x", "watermark_speed_x", 96.0f);
   job.watermark_speed_y = optionalScopedValue<float>(watermark_dict, job_dict, "speed_y", "watermark_speed_y", 64.0f);
@@ -196,8 +196,8 @@ void RenderJob::validate() const {
   if (subtitle_margin < 0) {
     throw std::runtime_error("subtitle_margin must be >= 0.");
   }
-  if (subtitle_font_size < 1) {
-    throw std::runtime_error("subtitle_font_size must be >= 1.");
+  if (subtitle_font_size <= 0.0f) {
+    throw std::runtime_error("subtitle_font_size must be > 0 and expressed as % of video height.");
   }
   if (subtitle_outline < 0) {
     throw std::runtime_error("subtitle_outline must be >= 0.");
@@ -214,8 +214,8 @@ void RenderJob::validate() const {
   if (logo_opacity < 0.0f || logo_opacity > 1.0f) {
     throw std::runtime_error("logo_opacity must be within [0, 1].");
   }
-  if (watermark_font_size < 1) {
-    throw std::runtime_error("watermark_font_size must be >= 1.");
+  if (watermark_font_size <= 0.0f) {
+    throw std::runtime_error("watermark_font_size must be > 0 and expressed as % of video height.");
   }
   if (watermark_outline < 0) {
     throw std::runtime_error("watermark_outline must be >= 0.");

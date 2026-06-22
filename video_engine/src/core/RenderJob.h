@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #include <pybind11/pybind11.h>
 
@@ -24,12 +25,12 @@ struct RenderJob {
   std::string subtitle_outline_color = "#101010";
   std::string subtitle_back_color = "#00000000";
   int subtitle_font_scale = 4;
-  int subtitle_font_size = 36;
+  float subtitle_font_size = 1.5f;
   int subtitle_margin = 8;
   int subtitle_outline = 3;
   int subtitle_shadow = 0;
   bool subtitle_bold = true;
-  bool subtitle_italic = false;
+  bool subtitle_italic = true;
   float subtitle_opacity = 1.0f;
   std::string logo_path;
   float logo_scale = 0.18f;
@@ -44,12 +45,12 @@ struct RenderJob {
   std::string watermark_text_color = "#FFFFFF";
   std::string watermark_outline_color = "#000000";
   std::string watermark_back_color = "#00000000";
-  int watermark_font_size = 28;
+  float watermark_font_size = 4.0f;
   int watermark_outline = 1;
   int watermark_shadow = 0;
   int watermark_margin = 24;
   bool watermark_bold = true;
-  bool watermark_italic = false;
+  bool watermark_italic = true;
   bool watermark_bounce = false;
   float watermark_speed_x = 96.0f;
   float watermark_speed_y = 64.0f;
@@ -58,6 +59,12 @@ struct RenderJob {
 
   static RenderJob fromPythonDict(const pybind11::dict& job_dict);
   void validate() const;
+  [[nodiscard]] int resolveSubtitleFontPixels(int video_height) const {
+    return std::clamp(static_cast<int>(subtitle_font_size * static_cast<float>(video_height) / 100.0f), 12, std::max(video_height / 3, 12));
+  }
+  [[nodiscard]] int resolveWatermarkFontPixels(int video_height) const {
+    return std::clamp(static_cast<int>(watermark_font_size * static_cast<float>(video_height) / 100.0f), 10, std::max(video_height / 4, 10));
+  }
 };
 
 }  // namespace video_engine
