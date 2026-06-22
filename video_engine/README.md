@@ -64,6 +64,7 @@ Useful flags:
 scripts\build_windows.bat --ninja
 scripts\build_windows.bat --vs --debug
 scripts\build_windows.bat --wheel
+scripts\build_windows.bat --ninja --cuda-root "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.6"
 ```
 
 If you vendor FFmpeg locally, place it under `video_engine/ffmpeg-dev/` with `include/` and `lib/`.

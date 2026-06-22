@@ -10,6 +10,8 @@ set "BUILD_WHEEL=0"
 set "CMAKE_ARGS="
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 set "CUDA_ALLOW_UNSUPPORTED=1"
+set "MSVC_TOOLSET_VER=14.38"
+set "CUDA_ROOT="
 
 :parse_args
 if "%~1"=="" goto after_args
@@ -37,6 +39,26 @@ if /I "%~1"=="--vs" (
 )
 if /I "%~1"=="--wheel" (
   set "BUILD_WHEEL=1"
+  shift
+  goto parse_args
+)
+if /I "%~1"=="--cuda-root" (
+  if "%~2"=="" (
+    echo [ERROR] Missing value after --cuda-root
+    exit /b 1
+  )
+  set "CUDA_ROOT=%~2"
+  shift
+  shift
+  goto parse_args
+)
+if /I "%~1"=="--msvc-toolset" (
+  if "%~2"=="" (
+    echo [ERROR] Missing value after --msvc-toolset
+    exit /b 1
+  )
+  set "MSVC_TOOLSET_VER=%~2"
+  shift
   shift
   goto parse_args
 )
@@ -88,6 +110,8 @@ echo [INFO] Repo root  : %REPO_ROOT%
 echo [INFO] Build dir  : %BUILD_DIR%
 echo [INFO] Build type : %BUILD_TYPE%
 echo [INFO] Generator  : %GENERATOR%
+echo [INFO] MSVC toolset preference : %MSVC_TOOLSET_VER%
+if defined CUDA_ROOT echo [INFO] CUDA root  : %CUDA_ROOT%
 
 if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
 
@@ -108,6 +132,15 @@ if errorlevel 1 (
     set "CMAKE_ARGS=%CMAKE_ARGS% -DCMAKE_CUDA_FLAGS=--allow-unsupported-compiler"
     echo [INFO] Adding CUDA flag: --allow-unsupported-compiler
   )
+)
+
+if defined CUDA_ROOT (
+  if not exist "%CUDA_ROOT%\bin\nvcc.exe" (
+    echo [ERROR] Invalid CUDA root: %CUDA_ROOT%
+    echo [ERROR] Expected nvcc at: %CUDA_ROOT%\bin\nvcc.exe
+    exit /b 1
+  )
+  set "CMAKE_ARGS=%CMAKE_ARGS% -DCUDAToolkit_ROOT=%CUDA_ROOT%"
 )
 
 cmake -S "%REPO_ROOT%" -B "%BUILD_DIR%" -G "%GENERATOR%" -DCMAKE_BUILD_TYPE=%BUILD_TYPE% %CMAKE_ARGS%
@@ -155,21 +188,28 @@ if exist "%VSWHERE%" (
 
 if defined VS_INSTALL (
   if exist "!VS_INSTALL!\Common7\Tools\VsDevCmd.bat" (
-    call "!VS_INSTALL!\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+    call "!VS_INSTALL!\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64 -vcvars_ver=%MSVC_TOOLSET_VER%
+    if errorlevel 1 (
+      echo [WARN] Preferred MSVC toolset %MSVC_TOOLSET_VER% was not activated. Retrying with Visual Studio default toolset...
+      call "!VS_INSTALL!\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+    )
     goto verify_cl
   )
 )
 
 if exist "%ProgramFiles%\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" (
-  call "%ProgramFiles%\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+  call "%ProgramFiles%\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64 -vcvars_ver=%MSVC_TOOLSET_VER%
+  if errorlevel 1 call "%ProgramFiles%\Microsoft Visual Studio\2022\Community\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
   goto verify_cl
 )
 if exist "%ProgramFiles%\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat" (
-  call "%ProgramFiles%\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+  call "%ProgramFiles%\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64 -vcvars_ver=%MSVC_TOOLSET_VER%
+  if errorlevel 1 call "%ProgramFiles%\Microsoft Visual Studio\2022\Professional\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
   goto verify_cl
 )
 if exist "%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" (
-  call "%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
+  call "%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64 -vcvars_ver=%MSVC_TOOLSET_VER%
+  if errorlevel 1 call "%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\Common7\Tools\VsDevCmd.bat" -host_arch=x64 -arch=x64
   goto verify_cl
 )
 
