@@ -9,6 +9,7 @@ set "GENERATOR="
 set "BUILD_WHEEL=0"
 set "CMAKE_ARGS="
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
+set "CUDA_ALLOW_UNSUPPORTED=1"
 
 :parse_args
 if "%~1"=="" goto after_args
@@ -36,6 +37,11 @@ if /I "%~1"=="--vs" (
 )
 if /I "%~1"=="--wheel" (
   set "BUILD_WHEEL=1"
+  shift
+  goto parse_args
+)
+if /I "%~1"=="--no-allow-unsupported" (
+  set "CUDA_ALLOW_UNSUPPORTED=0"
   shift
   goto parse_args
 )
@@ -93,6 +99,14 @@ if exist "%CACHE_FILE%" (
     echo [WARN] Removing stale build directory: %BUILD_DIR%
     rmdir /s /q "%BUILD_DIR%"
     mkdir "%BUILD_DIR%"
+  )
+)
+
+echo %CMAKE_ARGS% | findstr /I "CMAKE_CUDA_FLAGS" >nul 2>nul
+if errorlevel 1 (
+  if "%CUDA_ALLOW_UNSUPPORTED%"=="1" (
+    set "CMAKE_ARGS=%CMAKE_ARGS% -DCMAKE_CUDA_FLAGS=--allow-unsupported-compiler"
+    echo [INFO] Adding CUDA flag: --allow-unsupported-compiler
   )
 )
 
