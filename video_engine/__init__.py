@@ -44,6 +44,9 @@ def _configure_windows_dll_search() -> None:
 
 def _find_native_module() -> Path:
     suffixes = (".so", ".pyd", ".dll", ".dylib")
+    for path in sorted(_PACKAGE_ROOT.glob(f"{_NATIVE_BASENAME}*")):
+        if path.suffix in suffixes or any(str(path).endswith(s) for s in suffixes):
+            return path
     for build_dir in _BUILD_CANDIDATES:
         if not build_dir.exists():
             continue

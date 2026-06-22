@@ -96,6 +96,34 @@ import video_engine
 print(video_engine.version())
 ```
 
+## Build Wheel
+
+After the native module has already been built with CMake, package it into a wheel:
+
+```bash
+cd video_engine
+bash scripts/build_wheel.sh
+```
+
+This produces a wheel in `video_engine/dist/` that bundles:
+
+- the prebuilt native module `_video_engine_native*.so` or `.pyd`
+- Python wrapper `video_engine/__init__.py`
+- runtime FFmpeg libraries from `video_engine/ffmpeg-dev`
+
+Install on another Colab session:
+
+```bash
+pip install /path/to/video_engine/dist/video_engine-0.1.0-*.whl
+```
+
+Then use it directly:
+
+```python
+import video_engine
+print(video_engine.version())
+```
+
 ## Python API
 
 ```python
