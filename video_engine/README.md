@@ -148,6 +148,8 @@ import video_engine
 job = {
     "input": "input.mp4",
     "output": "output.mp4",
+    "video_scale": 1.0,
+    "flip_horizontal": False,
     "subtitle": {
         "srt": "examples/sample.srt",
         "gaussian_blur": True,
@@ -155,6 +157,7 @@ job = {
         "size": 13.0,
         "bold": True,
         "italic": True,
+        "upper": False,
         "color": "#FFF200",
         "outline_color": "#101010",
         "back_color": "#00000000",
@@ -183,6 +186,7 @@ job = {
         "size": 5.0,
         "bold": True,
         "italic": True,
+        "upper": True,
         "color": "#FFFFFF",
         "outline_color": "#000000",
         "bounce": True,
@@ -203,9 +207,12 @@ Nested job layout:
 
 - `subtitle.srt` or `subtitle.text`: subtitle source
 - `subtitle.font` or `subtitle.font_ttf`: system font name or explicit `.ttf`
+- `video_scale`: zoom from center, `1.0` means no zoom, `1.2` means zoom in 20%
+- `flip_horizontal`: mirror the whole video left-to-right
 - `subtitle.size`, `watermark.size`: `%` of video height, not pixels
 - `subtitle.size` default is `1.5` and `subtitle.italic` default is `true`
 - long subtitle text auto-wraps inside `subtitle.regions[*].w` and stays centered
+- `subtitle.upper`, `watermark.upper`: uppercase ASCII letters before rendering
 - `subtitle.bold`, `subtitle.italic`, `subtitle.color`
 - `subtitle.outline_color`, `subtitle.back_color`, `subtitle.outline`, `subtitle.shadow`
 - `subtitle.gaussian_blur`: enable Gaussian blur over subtitle regions

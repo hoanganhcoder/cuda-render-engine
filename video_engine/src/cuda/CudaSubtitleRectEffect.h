@@ -39,6 +39,8 @@ public:
       const AVFrame* previous_frame,
       AVFrame* output_frame,
       const std::vector<Region>& active_regions,
+      float video_scale,
+      bool flip_horizontal,
       bool gaussian_blur,
       const DeviceSubtitleOverlay& text_overlay,
       cudaStream_t stream) const;

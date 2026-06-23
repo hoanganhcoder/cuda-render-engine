@@ -187,6 +187,30 @@ int reflectPosition(double value, int travel) {
   return static_cast<int>(std::llround(wrapped));
 }
 
+std::pair<int, int> computeMotionPosition(
+    int video_width,
+    int video_height,
+    int object_width,
+    int object_height,
+    int margin,
+    bool bounce,
+    float speed_x,
+    float speed_y,
+    double timestamp_seconds,
+    int seed_x,
+    int seed_y) {
+  const int bounded_width = std::min(object_width, std::max(video_width - margin * 2, 1));
+  const int bounded_height = std::min(object_height, std::max(video_height - margin * 2, 1));
+  const int max_x = std::max(video_width - bounded_width - margin * 2, 0);
+  const int max_y = std::max(video_height - bounded_height - margin * 2, 0);
+  if (bounce) {
+    return std::make_pair(
+        margin + reflectPosition(static_cast<double>(seed_x) + static_cast<double>(speed_x) * timestamp_seconds, max_x),
+        margin + reflectPosition(static_cast<double>(seed_y) + static_cast<double>(speed_y) * timestamp_seconds, max_y));
+  }
+  return std::make_pair(std::max(video_width - bounded_width - margin, 0), margin);
+}
+
 Region makeMotionRegion(
     int video_width,
     int video_height,
@@ -202,16 +226,10 @@ Region makeMotionRegion(
   Region region;
   region.w = std::min(box_width, std::max(video_width - margin * 2, 1));
   region.h = std::min(box_height, std::max(video_height - margin * 2, 1));
-
-  const int max_x = std::max(video_width - region.w - margin * 2, 0);
-  const int max_y = std::max(video_height - region.h - margin * 2, 0);
-  if (bounce) {
-    region.x = margin + reflectPosition(static_cast<double>(seed_x) + static_cast<double>(speed_x) * timestamp_seconds, max_x);
-    region.y = margin + reflectPosition(static_cast<double>(seed_y) + static_cast<double>(speed_y) * timestamp_seconds, max_y);
-  } else {
-    region.x = std::max(video_width - region.w - margin, 0);
-    region.y = margin;
-  }
+  const auto [motion_x, motion_y] = computeMotionPosition(
+      video_width, video_height, region.w, region.h, margin, bounce, speed_x, speed_y, timestamp_seconds, seed_x, seed_y);
+  region.x = motion_x;
+  region.y = motion_y;
   return region;
 }
 
@@ -284,6 +302,7 @@ void WatermarkRenderer::initialize(const RenderJob& job, int video_width, int vi
   impl_->text_job.subtitle_margin = std::max(job.watermark_margin / 2, 0);
   impl_->text_job.subtitle_bold = job.watermark_bold;
   impl_->text_job.subtitle_italic = job.watermark_italic;
+  impl_->text_job.subtitle_uppercase = job.watermark_uppercase;
   impl_->text_job.subtitle_opacity = job.watermark_opacity;
 
   if (impl_->text_enabled) {
@@ -354,6 +373,20 @@ std::vector<SubtitleOverlay> WatermarkRenderer::render(double timestamp_seconds)
           impl_->source_job.watermark_opacity);
     }
     if (text_overlay.enabled) {
+      const auto [actual_x, actual_y] = computeMotionPosition(
+          impl_->video_width,
+          impl_->video_height,
+          text_overlay.width,
+          text_overlay.height,
+          impl_->source_job.watermark_margin,
+          impl_->source_job.watermark_bounce,
+          impl_->source_job.watermark_speed_x,
+          impl_->source_job.watermark_speed_y,
+          timestamp_seconds,
+          73,
+          41);
+      text_overlay.x = actual_x;
+      text_overlay.y = actual_y;
       text_overlay.opacity = impl_->source_job.watermark_opacity;
       overlays.push_back(std::move(text_overlay));
     }

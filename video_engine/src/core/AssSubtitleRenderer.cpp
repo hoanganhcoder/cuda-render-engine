@@ -49,6 +49,17 @@ std::string escapeAssText(const std::string& text) {
   return escaped;
 }
 
+std::string uppercaseAscii(const std::string& text) {
+  std::string output = text;
+  for (char& ch : output) {
+    const unsigned char value = static_cast<unsigned char>(ch);
+    if (value >= 'a' && value <= 'z') {
+      ch = static_cast<char>(value - 'a' + 'A');
+    }
+  }
+  return output;
+}
+
 std::string formatAssTime(double seconds) {
   const int total_centiseconds = static_cast<int>(std::llround(seconds * 100.0));
   const int hours = total_centiseconds / 360000;
@@ -90,16 +101,10 @@ std::vector<std::string> wrapWordsToLines(const std::string& text, int max_chars
     std::string word;
     std::string current;
     while (words >> word) {
-      while (static_cast<int>(word.size()) > max_chars_per_line && max_chars_per_line > 1) {
-        const std::string chunk = word.substr(0, static_cast<size_t>(max_chars_per_line - 1)) + "-";
-        if (!current.empty()) {
-          output.push_back(current);
-          current.clear();
-        }
-        output.push_back(chunk);
-        word.erase(0, static_cast<size_t>(max_chars_per_line - 1));
+      if (static_cast<int>(word.size()) > max_chars_per_line && !current.empty()) {
+        output.push_back(current);
+        current.clear();
       }
-
       const std::string candidate = current.empty() ? word : current + " " + word;
       if (static_cast<int>(candidate.size()) > max_chars_per_line && !current.empty()) {
         output.push_back(current);
@@ -123,7 +128,7 @@ std::vector<std::string> wrapWordsToLines(const std::string& text, int max_chars
 
 std::string wrapCueText(const std::string& text, int region_width, int margin, int font_pixels) {
   const int usable_width = std::max(region_width - margin * 2, font_pixels * 4);
-  const float estimated_char_width = std::max(static_cast<float>(font_pixels) * 0.58f, 1.0f);
+  const float estimated_char_width = std::max(static_cast<float>(font_pixels) * 0.66f, 1.0f);
   const int max_chars_per_line = std::max(1, static_cast<int>(static_cast<float>(usable_width) / estimated_char_width));
   const std::vector<std::string> lines = wrapWordsToLines(text, max_chars_per_line);
   std::ostringstream wrapped;
@@ -164,8 +169,13 @@ std::string buildAssScript(
   script += "[Events]\n";
   script += "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
   for (const SubtitleCue& cue : cues) {
-    const std::string wrapped_text =
-        wrap_region.has_value() ? wrapCueText(cue.text, wrap_region->w, job.subtitle_margin, subtitle_font_pixels) : cue.text;
+    std::string normalized_text = cue.text;
+    if (job.subtitle_uppercase) {
+      normalized_text = uppercaseAscii(normalized_text);
+    }
+    const std::string wrapped_text = wrap_region.has_value()
+                                         ? wrapCueText(normalized_text, wrap_region->w, job.subtitle_margin, subtitle_font_pixels)
+                                         : normalized_text;
     script += "Dialogue: 0," + formatAssTime(cue.start) + "," + formatAssTime(cue.end) +
               ",Default,,0,0," + std::to_string(job.subtitle_margin) + ",," + escapeAssText(wrapped_text) + "\n";
   }

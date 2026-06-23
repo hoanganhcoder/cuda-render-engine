@@ -89,7 +89,7 @@ __device__ float mixFloat(float a, float b, float amount) {
 }
 
 __device__ int computeBlurRadius(const DeviceRegion& region) {
-  return clampInt(static_cast<int>(2.0f + region.horizontal_blur * 14.0f + region.feather * 0.06f), 1, 10);
+  return clampInt(static_cast<int>(1.5f + region.horizontal_blur * 8.0f + region.feather * 0.035f), 1, 6);
 }
 
 __device__ float gaussianWeight(int dx, int dy, float sigma_x, float sigma_y) {
@@ -97,6 +97,15 @@ __device__ float gaussianWeight(int dx, int dy, float sigma_x, float sigma_y) {
   const float fy = static_cast<float>(dy);
   const float exponent = -0.5f * ((fx * fx) / (sigma_x * sigma_x) + (fy * fy) / (sigma_y * sigma_y));
   return __expf(exponent);
+}
+
+__device__ int mapOutputToSourceCoord(int coord, int size, float video_scale, bool flip_horizontal, bool is_x) {
+  const float center = (static_cast<float>(size) - 1.0f) * 0.5f;
+  float mapped = center + (static_cast<float>(coord) - center) / fmaxf(video_scale, 1.0f);
+  if (is_x && flip_horizontal) {
+    mapped = static_cast<float>(size - 1) - mapped;
+  }
+  return clampInt(static_cast<int>(mapped + 0.5f), 0, size - 1);
 }
 
 __device__ float sampleOverlayAlpha(const DeviceSubtitleOverlay& overlay, int x, int y) {
@@ -131,7 +140,9 @@ __device__ float sampleGaussianLuma(
     int height,
     int x,
     int y,
-    const DeviceRegion& region) {
+    const DeviceRegion& region,
+    float video_scale,
+    bool flip_horizontal) {
   const int radius = computeBlurRadius(region);
   const float sigma_x = fmaxf(0.9f, static_cast<float>(radius) * 0.65f);
   const float sigma_y = fmaxf(0.9f, sigma_x * fmaxf(region.vertical_stretch, 0.6f));
@@ -140,7 +151,9 @@ __device__ float sampleGaussianLuma(
   for (int dy = -radius; dy <= radius; ++dy) {
     for (int dx = -radius; dx <= radius; ++dx) {
       const float weight = gaussianWeight(dx, dy, sigma_x, sigma_y);
-      accum += normalizeByte(loadLuma(source_y, pitch_y, width, height, x + dx, y + dy)) * weight;
+      const int sample_x = mapOutputToSourceCoord(x + dx, width, video_scale, flip_horizontal, true);
+      const int sample_y = mapOutputToSourceCoord(y + dy, height, video_scale, false, false);
+      accum += normalizeByte(loadLuma(source_y, pitch_y, width, height, sample_x, sample_y)) * weight;
       total_weight += weight;
     }
   }
@@ -154,11 +167,13 @@ __device__ uchar2 sampleGaussianChroma(
     int height,
     int x,
     int y,
-    const DeviceRegion& region) {
+    const DeviceRegion& region,
+    float video_scale,
+    bool flip_horizontal) {
   const int chroma_width = width / 2;
   const int chroma_height = height / 2;
-  const int center_x = x / 2;
-  const int center_y = y / 2;
+  const int center_x = mapOutputToSourceCoord(x, width, video_scale, flip_horizontal, true) / 2;
+  const int center_y = mapOutputToSourceCoord(y, height, video_scale, false, false) / 2;
   const int radius = clampInt((computeBlurRadius(region) + 1) / 2, 1, 6);
   const float sigma_x = fmaxf(0.8f, static_cast<float>(radius) * 0.65f);
   const float sigma_y = fmaxf(0.8f, sigma_x * fmaxf(region.vertical_stretch, 0.6f));
@@ -189,6 +204,8 @@ __global__ void subtitleRectLumaKernel(
     int width,
     int height,
     int region_count,
+    float video_scale,
+    bool flip_horizontal,
     bool gaussian_blur,
     DeviceSubtitleOverlay overlay) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -197,7 +214,9 @@ __global__ void subtitleRectLumaKernel(
     return;
   }
 
-  float current = normalizeByte(loadLuma(source_y, pitch_y, width, height, x, y));
+  const int mapped_x = mapOutputToSourceCoord(x, width, video_scale, flip_horizontal, true);
+  const int mapped_y = mapOutputToSourceCoord(y, height, video_scale, false, false);
+  float current = normalizeByte(loadLuma(source_y, pitch_y, width, height, mapped_x, mapped_y));
   for (int i = 0; i < region_count; ++i) {
     const DeviceRegion& region = kDeviceRegions[i];
     const float mask = edgeMask(region, x, y) * clamp01(region.strength);
@@ -205,7 +224,8 @@ __global__ void subtitleRectLumaKernel(
       continue;
     }
 
-    const float blur_value = gaussian_blur ? sampleGaussianLuma(source_y, pitch_y, width, height, x, y, region) : current;
+    const float blur_value =
+        gaussian_blur ? sampleGaussianLuma(source_y, pitch_y, width, height, x, y, region, video_scale, flip_horizontal) : current;
     float blended = mixFloat(current, blur_value, mask);
     if (previous_y != nullptr && region.temporal_blend > 0.0f) {
       const float previous = normalizeByte(loadLuma(previous_y, pitch_y, width, height, x, y));
@@ -230,6 +250,8 @@ __global__ void subtitleRectChromaKernel(
     int width,
     int height,
     int region_count,
+    float video_scale,
+    bool flip_horizontal,
     bool gaussian_blur,
     DeviceSubtitleOverlay overlay) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -240,7 +262,9 @@ __global__ void subtitleRectChromaKernel(
     return;
   }
 
-  uchar2 current = loadChroma(source_uv, pitch_uv, chroma_width, chroma_height, x, y);
+  const int mapped_x = mapOutputToSourceCoord(x * 2, width, video_scale, flip_horizontal, true) / 2;
+  const int mapped_y = mapOutputToSourceCoord(y * 2, height, video_scale, false, false) / 2;
+  uchar2 current = loadChroma(source_uv, pitch_uv, chroma_width, chroma_height, mapped_x, mapped_y);
   float current_u = normalizeByte(current.x);
   float current_v = normalizeByte(current.y);
   const int full_x = x * 2;
@@ -253,7 +277,9 @@ __global__ void subtitleRectChromaKernel(
     }
 
     const uchar2 blur_uv =
-        gaussian_blur ? sampleGaussianChroma(source_uv, pitch_uv, width, height, full_x, full_y, region) : current;
+        gaussian_blur
+            ? sampleGaussianChroma(source_uv, pitch_uv, width, height, full_x, full_y, region, video_scale, flip_horizontal)
+            : current;
     float blended_u = mixFloat(current_u, normalizeByte(blur_uv.x), mask);
     float blended_v = mixFloat(current_v, normalizeByte(blur_uv.y), mask);
     if (previous_uv != nullptr && region.temporal_blend > 0.0f) {
@@ -289,6 +315,8 @@ void CudaSubtitleRectEffect::apply(
     const AVFrame* previous_frame,
     AVFrame* output_frame,
     const std::vector<Region>& active_regions,
+    float video_scale,
+    bool flip_horizontal,
     bool gaussian_blur,
     const DeviceSubtitleOverlay& text_overlay,
     cudaStream_t stream) const {
@@ -340,6 +368,8 @@ void CudaSubtitleRectEffect::apply(
       width,
       height,
       region_count,
+      video_scale,
+      flip_horizontal,
       gaussian_blur,
       text_overlay);
   dim3 chroma_grid(((width / 2) + block.x - 1) / block.x, ((height / 2) + block.y - 1) / block.y);
@@ -351,6 +381,8 @@ void CudaSubtitleRectEffect::apply(
       width,
       height,
       region_count,
+      video_scale,
+      flip_horizontal,
       gaussian_blur,
       text_overlay);
   throwOnCudaError(cudaGetLastError(), "Subtitle rectangle NV12 CUDA kernel failed");

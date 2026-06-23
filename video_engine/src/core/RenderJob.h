@@ -16,6 +16,8 @@ struct RenderJob {
   int width = 0;
   int height = 0;
   double fps = 0.0;
+  float video_scale = 1.0f;
+  bool flip_horizontal = false;
   bool subtitle_gaussian_blur = true;
   std::string subtitle_srt;
   std::string subtitle_text;
@@ -31,6 +33,7 @@ struct RenderJob {
   int subtitle_shadow = 0;
   bool subtitle_bold = true;
   bool subtitle_italic = true;
+  bool subtitle_uppercase = false;
   float subtitle_opacity = 1.0f;
   std::string logo_path;
   float logo_scale = 0.18f;
@@ -51,6 +54,7 @@ struct RenderJob {
   int watermark_margin = 24;
   bool watermark_bold = true;
   bool watermark_italic = true;
+  bool watermark_uppercase = false;
   bool watermark_bounce = false;
   float watermark_speed_x = 96.0f;
   float watermark_speed_y = 64.0f;

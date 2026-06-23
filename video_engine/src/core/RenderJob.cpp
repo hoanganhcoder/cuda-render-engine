@@ -1,6 +1,7 @@
 #include "core/RenderJob.h"
 
 #include <cctype>
+#include <filesystem>
 #include <stdexcept>
 
 namespace py = pybind11;
@@ -88,6 +89,25 @@ Region parseRegion(const py::handle& handle) {
   return region;
 }
 
+bool looksLikeFontPath(const std::string& value) {
+  if (value.empty()) {
+    return false;
+  }
+  const std::string lower = [&]() {
+    std::string output = value;
+    for (char& ch : output) {
+      ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+    }
+    return output;
+  }();
+  const auto has_suffix = [&](const char* suffix) {
+    const std::string suffix_string(suffix);
+    return lower.size() >= suffix_string.size() &&
+           lower.compare(lower.size() - suffix_string.size(), suffix_string.size(), suffix_string) == 0;
+  };
+  return has_suffix(".ttf") || has_suffix(".otf") || has_suffix(".ttc");
+}
+
 }  // namespace
 
 RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
@@ -101,6 +121,8 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.width = optionalValue<int>(job_dict, "width", 0);
   job.height = optionalValue<int>(job_dict, "height", 0);
   job.fps = optionalValue<double>(job_dict, "fps", 0.0);
+  job.video_scale = optionalValue<float>(job_dict, "video_scale", 1.0f);
+  job.flip_horizontal = optionalValue<bool>(job_dict, "flip_horizontal", false);
   job.subtitle_gaussian_blur = optionalScopedValue<bool>(subtitle_dict, job_dict, "gaussian_blur", "subtitle_gaussian_blur", true);
   job.subtitle_srt = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "srt", "subtitle_srt", "subtitle_srt", "subtitle_srt", "");
   job.subtitle_text = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "text", "subtitle_text", "subtitle_text", "subtitle_text", "");
@@ -116,6 +138,7 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.subtitle_shadow = optionalScopedValue<int>(subtitle_dict, job_dict, "shadow", "subtitle_shadow", 0);
   job.subtitle_bold = optionalScopedValue<bool>(subtitle_dict, job_dict, "bold", "subtitle_bold", true);
   job.subtitle_italic = optionalScopedAliasValue<bool>(subtitle_dict, job_dict, "italic", "i", "subtitle_italic", "subtitle_italic", true);
+  job.subtitle_uppercase = optionalScopedAliasValue<bool>(subtitle_dict, job_dict, "upper", "uppercase", "subtitle_uppercase", "subtitle_uppercase", false);
   job.subtitle_opacity = optionalScopedValue<float>(subtitle_dict, job_dict, "opacity", "subtitle_opacity", 1.0f);
 
   job.logo_path = optionalScopedAliasValue<std::string>(logo_dict, job_dict, "path", "logo_path", "logo_path", "logo_path", "");
@@ -138,10 +161,20 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.watermark_margin = optionalScopedValue<int>(watermark_dict, job_dict, "margin", "watermark_margin", 24);
   job.watermark_bold = optionalScopedValue<bool>(watermark_dict, job_dict, "bold", "watermark_bold", true);
   job.watermark_italic = optionalScopedAliasValue<bool>(watermark_dict, job_dict, "italic", "i", "watermark_italic", "watermark_italic", true);
+  job.watermark_uppercase = optionalScopedAliasValue<bool>(watermark_dict, job_dict, "upper", "uppercase", "watermark_uppercase", "watermark_uppercase", false);
   job.watermark_bounce = optionalScopedAliasValue<bool>(watermark_dict, job_dict, "bounce", "text_logo_bounce", "watermark_bounce", "text_logo_bounce", false);
   job.watermark_speed_x = optionalScopedValue<float>(watermark_dict, job_dict, "speed_x", "watermark_speed_x", 96.0f);
   job.watermark_speed_y = optionalScopedValue<float>(watermark_dict, job_dict, "speed_y", "watermark_speed_y", 64.0f);
   job.watermark_opacity = optionalScopedAliasValue<float>(watermark_dict, job_dict, "opacity", "text_logo_opacity", "watermark_opacity", "text_logo_opacity", 0.28f);
+
+  if (job.subtitle_font_path.empty() && looksLikeFontPath(job.subtitle_font_family)) {
+    job.subtitle_font_path = job.subtitle_font_family;
+    job.subtitle_font_family = std::filesystem::path(job.subtitle_font_path).stem().string();
+  }
+  if (job.watermark_font_path.empty() && looksLikeFontPath(job.watermark_font_family)) {
+    job.watermark_font_path = job.watermark_font_family;
+    job.watermark_font_family = std::filesystem::path(job.watermark_font_path).stem().string();
+  }
 
   if (!subtitle_dict.empty() && subtitle_dict.contains("regions") && !subtitle_dict["regions"].is_none()) {
     py::list region_list = py::cast<py::list>(subtitle_dict["regions"]);
@@ -189,6 +222,9 @@ void RenderJob::validate() const {
   }
   if (fps < 0.0) {
     throw std::runtime_error("Job fps must be >= 0.");
+  }
+  if (video_scale < 1.0f) {
+    throw std::runtime_error("video_scale must be >= 1.0.");
   }
   if (subtitle_font_scale < 1) {
     throw std::runtime_error("subtitle_font_scale must be >= 1.");

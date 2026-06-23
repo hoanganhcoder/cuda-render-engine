@@ -4,6 +4,8 @@
   "width": 1280,
   "height": 720,
   "fps": 30,
+  "video_scale": 1.0,
+  "flip_horizontal": false,
   "subtitle": {
     "srt": "examples/sample.srt",
     "gaussian_blur": true,
@@ -11,6 +13,7 @@
     "size": 13.0,
     "bold": true,
     "italic": true,
+    "upper": false,
     "color": "#FFF200",
     "outline_color": "#101010",
     "back_color": "#00000000",
@@ -40,6 +43,7 @@
     "size": 5.0,
     "bold": true,
     "italic": true,
+    "upper": true,
     "color": "#FFFFFF",
     "outline_color": "#000000",
     "back_color": "#00000000",
@@ -47,8 +51,8 @@
     "shadow": 0,
     "margin": 28,
     "bounce": true,
-    "speed_x": 88.0,
-    "speed_y": 60.0,
+    "speed_x": 10.0,
+    "speed_y": 7.0,
     "opacity": 0.28
   },
   "logo": {

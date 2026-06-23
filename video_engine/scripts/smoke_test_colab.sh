@@ -40,6 +40,8 @@ repo_root = os.environ["VIDEO_ENGINE_REPO_ROOT"]
 job = {
     "input": os.path.join(repo_root, "sample.mp4"),
     "output": os.path.join(repo_root, "output.mp4"),
+    "video_scale": 1.0,
+    "flip_horizontal": False,
     "subtitle": {
         "srt": os.path.join(repo_root, "examples", "sample.srt"),
         "gaussian_blur": True,
@@ -47,6 +49,7 @@ job = {
         "size": 13.0,
         "bold": True,
         "italic": True,
+        "upper": False,
         "color": "#FFF200",
         "outline_color": "#101010",
         "back_color": "#00000000",
@@ -76,6 +79,7 @@ job = {
         "size": 5.0,
         "bold": True,
         "italic": True,
+        "upper": True,
         "color": "#FFFFFF",
         "outline_color": "#000000",
         "back_color": "#00000000",
@@ -83,8 +87,8 @@ job = {
         "shadow": 0,
         "margin": 24,
         "bounce": True,
-        "speed_x": 82.0,
-        "speed_y": 56.0,
+        "speed_x": 10.0,
+        "speed_y": 7.0,
         "opacity": 0.28,
     },
 }
