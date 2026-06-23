@@ -1,6 +1,7 @@
 #include "core/AssSubtitleRenderer.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
@@ -49,13 +50,160 @@ std::string escapeAssText(const std::string& text) {
   return escaped;
 }
 
-std::string uppercaseAscii(const std::string& text) {
-  std::string output = text;
-  for (char& ch : output) {
-    const unsigned char value = static_cast<unsigned char>(ch);
-    if (value >= 'a' && value <= 'z') {
-      ch = static_cast<char>(value - 'a' + 'A');
+char32_t decodeUtf8CodePoint(const std::string& text, size_t& index) {
+  if (index >= text.size()) {
+    return 0;
+  }
+
+  const unsigned char lead = static_cast<unsigned char>(text[index]);
+  if (lead < 0x80) {
+    ++index;
+    return static_cast<char32_t>(lead);
+  }
+
+  size_t width = 0;
+  char32_t code_point = 0;
+  if ((lead & 0xE0) == 0xC0) {
+    width = 2;
+    code_point = static_cast<char32_t>(lead & 0x1F);
+  } else if ((lead & 0xF0) == 0xE0) {
+    width = 3;
+    code_point = static_cast<char32_t>(lead & 0x0F);
+  } else if ((lead & 0xF8) == 0xF0) {
+    width = 4;
+    code_point = static_cast<char32_t>(lead & 0x07);
+  } else {
+    ++index;
+    return static_cast<char32_t>(lead);
+  }
+
+  if (index + width > text.size()) {
+    ++index;
+    return static_cast<char32_t>(lead);
+  }
+
+  for (size_t offset = 1; offset < width; ++offset) {
+    const unsigned char byte = static_cast<unsigned char>(text[index + offset]);
+    if ((byte & 0xC0) != 0x80) {
+      ++index;
+      return static_cast<char32_t>(lead);
     }
+    code_point = (code_point << 6) | static_cast<char32_t>(byte & 0x3F);
+  }
+
+  index += width;
+  return code_point;
+}
+
+void appendUtf8CodePoint(std::string& output, char32_t code_point) {
+  if (code_point <= 0x7F) {
+    output.push_back(static_cast<char>(code_point));
+  } else if (code_point <= 0x7FF) {
+    output.push_back(static_cast<char>(0xC0 | ((code_point >> 6) & 0x1F)));
+    output.push_back(static_cast<char>(0x80 | (code_point & 0x3F)));
+  } else if (code_point <= 0xFFFF) {
+    output.push_back(static_cast<char>(0xE0 | ((code_point >> 12) & 0x0F)));
+    output.push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3F)));
+    output.push_back(static_cast<char>(0x80 | (code_point & 0x3F)));
+  } else {
+    output.push_back(static_cast<char>(0xF0 | ((code_point >> 18) & 0x07)));
+    output.push_back(static_cast<char>(0x80 | ((code_point >> 12) & 0x3F)));
+    output.push_back(static_cast<char>(0x80 | ((code_point >> 6) & 0x3F)));
+    output.push_back(static_cast<char>(0x80 | (code_point & 0x3F)));
+  }
+}
+
+char32_t uppercaseCodePoint(char32_t code_point) {
+  if (code_point >= U'a' && code_point <= U'z') {
+    return code_point - (U'a' - U'A');
+  }
+
+  switch (code_point) {
+    case U'\u00E0': return U'\u00C0';
+    case U'\u00E1': return U'\u00C1';
+    case U'\u1EA3': return U'\u1EA2';
+    case U'\u00E3': return U'\u00C3';
+    case U'\u1EA1': return U'\u1EA0';
+    case U'\u0103': return U'\u0102';
+    case U'\u1EB1': return U'\u1EB0';
+    case U'\u1EAF': return U'\u1EAE';
+    case U'\u1EB3': return U'\u1EB2';
+    case U'\u1EB5': return U'\u1EB4';
+    case U'\u1EB7': return U'\u1EB6';
+    case U'\u00E2': return U'\u00C2';
+    case U'\u1EA7': return U'\u1EA6';
+    case U'\u1EA5': return U'\u1EA4';
+    case U'\u1EA9': return U'\u1EA8';
+    case U'\u1EAB': return U'\u1EAA';
+    case U'\u1EAD': return U'\u1EAC';
+    case U'\u00E8': return U'\u00C8';
+    case U'\u00E9': return U'\u00C9';
+    case U'\u1EBB': return U'\u1EBA';
+    case U'\u1EBD': return U'\u1EBC';
+    case U'\u1EB9': return U'\u1EB8';
+    case U'\u00EA': return U'\u00CA';
+    case U'\u1EC1': return U'\u1EC0';
+    case U'\u1EBF': return U'\u1EBE';
+    case U'\u1EC3': return U'\u1EC2';
+    case U'\u1EC5': return U'\u1EC4';
+    case U'\u1EC7': return U'\u1EC6';
+    case U'\u00EC': return U'\u00CC';
+    case U'\u00ED': return U'\u00CD';
+    case U'\u1EC9': return U'\u1EC8';
+    case U'\u0129': return U'\u0128';
+    case U'\u1ECB': return U'\u1ECA';
+    case U'\u00F2': return U'\u00D2';
+    case U'\u00F3': return U'\u00D3';
+    case U'\u1ECF': return U'\u1ECE';
+    case U'\u00F5': return U'\u00D5';
+    case U'\u1ECD': return U'\u1ECC';
+    case U'\u00F4': return U'\u00D4';
+    case U'\u1ED3': return U'\u1ED2';
+    case U'\u1ED1': return U'\u1ED0';
+    case U'\u1ED5': return U'\u1ED4';
+    case U'\u1ED7': return U'\u1ED6';
+    case U'\u1ED9': return U'\u1ED8';
+    case U'\u01A1': return U'\u01A0';
+    case U'\u1EDD': return U'\u1EDC';
+    case U'\u1EDB': return U'\u1EDA';
+    case U'\u1EDF': return U'\u1EDE';
+    case U'\u1EE1': return U'\u1EE0';
+    case U'\u1EE3': return U'\u1EE2';
+    case U'\u00F9': return U'\u00D9';
+    case U'\u00FA': return U'\u00DA';
+    case U'\u1EE7': return U'\u1EE6';
+    case U'\u0169': return U'\u0168';
+    case U'\u1EE5': return U'\u1EE4';
+    case U'\u01B0': return U'\u01AF';
+    case U'\u1EEB': return U'\u1EEA';
+    case U'\u1EE9': return U'\u1EE8';
+    case U'\u1EED': return U'\u1EEC';
+    case U'\u1EEF': return U'\u1EEE';
+    case U'\u1EF1': return U'\u1EF0';
+    case U'\u1EF3': return U'\u1EF2';
+    case U'\u00FD': return U'\u00DD';
+    case U'\u1EF7': return U'\u1EF6';
+    case U'\u1EF9': return U'\u1EF8';
+    case U'\u1EF5': return U'\u1EF4';
+    case U'\u0111': return U'\u0110';
+    default: return code_point;
+  }
+}
+
+size_t countUtf8CodePoints(const std::string& text) {
+  size_t count = 0;
+  for (size_t index = 0; index < text.size();) {
+    decodeUtf8CodePoint(text, index);
+    ++count;
+  }
+  return count;
+}
+
+std::string uppercaseUnicode(const std::string& text) {
+  std::string output;
+  output.reserve(text.size());
+  for (size_t index = 0; index < text.size();) {
+    appendUtf8CodePoint(output, uppercaseCodePoint(decodeUtf8CodePoint(text, index)));
   }
   return output;
 }
@@ -101,12 +249,12 @@ std::vector<std::string> wrapWordsToLines(const std::string& text, int max_chars
     std::string word;
     std::string current;
     while (words >> word) {
-      if (static_cast<int>(word.size()) > max_chars_per_line && !current.empty()) {
+      if (static_cast<int>(countUtf8CodePoints(word)) > max_chars_per_line && !current.empty()) {
         output.push_back(current);
         current.clear();
       }
       const std::string candidate = current.empty() ? word : current + " " + word;
-      if (static_cast<int>(candidate.size()) > max_chars_per_line && !current.empty()) {
+      if (static_cast<int>(countUtf8CodePoints(candidate)) > max_chars_per_line && !current.empty()) {
         output.push_back(current);
         current = word;
       } else {
@@ -171,7 +319,7 @@ std::string buildAssScript(
   for (const SubtitleCue& cue : cues) {
     std::string normalized_text = cue.text;
     if (job.subtitle_uppercase) {
-      normalized_text = uppercaseAscii(normalized_text);
+      normalized_text = uppercaseUnicode(normalized_text);
     }
     const std::string wrapped_text = wrap_region.has_value()
                                          ? wrapCueText(normalized_text, wrap_region->w, job.subtitle_margin, subtitle_font_pixels)
