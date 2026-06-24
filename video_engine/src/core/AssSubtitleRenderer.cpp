@@ -308,18 +308,9 @@ std::vector<std::string> wrapWordsToLines(const std::string& text, int max_chars
   return output;
 }
 
-bool shouldWrapToRegion(int region_width, int video_width, int font_pixels) {
-  if (region_width <= 0 || video_width <= 0) {
-    return false;
-  }
-
-  const int soft_full_width_threshold = std::max(video_width - font_pixels * 2, static_cast<int>(std::lround(video_width * 0.85)));
-  return region_width < soft_full_width_threshold;
-}
-
 std::string wrapCueText(const std::string& text, int region_width, int margin, int font_pixels) {
   const int usable_width = std::max(region_width - margin * 2, font_pixels * 4);
-  const float estimated_char_width = std::max(static_cast<float>(font_pixels) * 0.42f, 1.0f);
+  const float estimated_char_width = std::max(static_cast<float>(font_pixels) * 0.33f, 1.0f);
   const int max_chars_per_line = std::max(1, static_cast<int>(static_cast<float>(usable_width) / estimated_char_width));
   const std::vector<std::string> lines = wrapWordsToLines(text, max_chars_per_line);
   std::ostringstream wrapped;
@@ -364,11 +355,9 @@ std::string buildAssScript(
     if (job.subtitle_uppercase) {
       normalized_text = uppercaseUnicode(normalized_text);
     }
-    const bool use_region_wrap =
-        wrap_region.has_value() && shouldWrapToRegion(wrap_region->w, video_width, subtitle_font_pixels);
-    const std::string wrapped_text =
-        use_region_wrap ? wrapCueText(normalized_text, wrap_region->w, job.subtitle_margin, subtitle_font_pixels)
-                        : normalized_text;
+    const std::string wrapped_text = wrap_region.has_value()
+                                         ? wrapCueText(normalized_text, wrap_region->w, job.subtitle_margin, subtitle_font_pixels)
+                                         : normalized_text;
     script += "Dialogue: 0," + formatAssTime(cue.start) + "," + formatAssTime(cue.end) +
               ",Default,,0,0," + std::to_string(job.subtitle_margin) + ",," + escapeAssText(wrapped_text) + "\n";
   }
