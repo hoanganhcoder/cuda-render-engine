@@ -24,6 +24,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   libass-dev \
   libfontconfig1-dev \
   libfreetype6-dev \
+  libharfbuzz-dev \
   libnuma-dev \
   fonts-dejavu-core \
   fonts-noto-core \

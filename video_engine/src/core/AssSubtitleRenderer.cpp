@@ -308,20 +308,118 @@ std::vector<std::string> wrapWordsToLines(const std::string& text, int max_chars
   return output;
 }
 
-std::string wrapCueText(const std::string& text, int region_width, int margin, int font_pixels) {
-  const int side_safety_padding = std::max(margin * 2, std::max(font_pixels / 2, 12));
-  const int usable_width = std::max(region_width - side_safety_padding * 2, font_pixels * 4);
-  const float estimated_char_width = std::max(static_cast<float>(font_pixels) * 0.33f, 1.0f);
-  const int max_chars_per_line = std::max(1, static_cast<int>(static_cast<float>(usable_width) / estimated_char_width));
-  const std::vector<std::string> lines = wrapWordsToLines(text, max_chars_per_line);
-  std::ostringstream wrapped;
-  for (size_t index = 0; index < lines.size(); ++index) {
-    if (index > 0) {
-      wrapped << "\n";
-    }
-    wrapped << lines[index];
+int computeHorizontalSafetyPadding(int margin, int font_pixels, int outline, bool italic) {
+  const int outline_padding = std::max(outline * 3, 6);
+  const int italic_padding = italic ? std::max(font_pixels / 3, 10) : std::max(font_pixels / 6, 4);
+  return std::max(margin * 2, outline_padding + italic_padding);
+}
+
+float estimateCodePointWidthEm(char32_t code_point, bool bold, bool italic) {
+  float width = 0.62f;
+  if (code_point == U' ') {
+    width = 0.34f;
+  } else if ((code_point >= U'0' && code_point <= U'9') || (code_point >= U'A' && code_point <= U'Z')) {
+    width = 0.72f;
+  } else if (code_point == U',' || code_point == U'.' || code_point == U':' || code_point == U';' || code_point == U'!' ||
+             code_point == U'?' || code_point == U'\'') {
+    width = 0.30f;
+  } else if (code_point == U'-' || code_point == U'_') {
+    width = 0.42f;
+  } else if (code_point >= 0x2E80) {
+    width = 1.0f;
   }
-  return wrapped.str();
+
+  if (bold) {
+    width += 0.04f;
+  }
+  if (italic) {
+    width += 0.03f;
+  }
+  return width;
+}
+
+float estimateTextWidthPixels(const std::string& text, int font_pixels, int outline, bool bold, bool italic) {
+  float width = 0.0f;
+  for (size_t index = 0; index < text.size();) {
+    width += estimateCodePointWidthEm(decodeUtf8CodePoint(text, index), bold, italic) * static_cast<float>(font_pixels);
+  }
+  width += static_cast<float>(outline) * 2.5f;
+  return width;
+}
+
+std::vector<std::string> wrapCueTextToLines(
+    const std::string& text,
+    int region_width,
+    int margin,
+    int font_pixels,
+    int outline,
+    bool bold,
+    bool italic) {
+  const int side_safety_padding = computeHorizontalSafetyPadding(margin, font_pixels, outline, italic);
+  const float usable_width = static_cast<float>(std::max(region_width - side_safety_padding * 2, font_pixels * 4));
+  std::vector<std::string> output;
+
+  std::istringstream input(text);
+  std::string raw_line;
+  while (std::getline(input, raw_line, '\n')) {
+    std::istringstream words(raw_line);
+    std::string word;
+    std::string current;
+    while (words >> word) {
+      const std::string candidate = current.empty() ? word : current + " " + word;
+      if (!current.empty() && estimateTextWidthPixels(candidate, font_pixels, outline, bold, italic) > usable_width) {
+        output.push_back(current);
+        current = word;
+      } else {
+        current = candidate;
+      }
+    }
+
+    if (!current.empty()) {
+      output.push_back(current);
+    } else if (raw_line.empty()) {
+      output.emplace_back();
+    }
+  }
+
+  if (output.empty()) {
+    output.push_back(text);
+  }
+  return output;
+}
+
+struct AssMargins {
+  int left = 20;
+  int right = 20;
+  int vertical = 8;
+};
+
+AssMargins computeAssMargins(
+    const RenderJob& job,
+    const std::optional<Region>& wrap_region,
+    int video_width,
+    int video_height,
+    int font_pixels) {
+  AssMargins margins;
+  margins.vertical = job.subtitle_margin;
+
+  if (!wrap_region.has_value()) {
+    return margins;
+  }
+
+  const int side_safety_padding = computeHorizontalSafetyPadding(
+      job.subtitle_margin,
+      font_pixels,
+      job.subtitle_outline,
+      job.subtitle_italic);
+  margins.left = std::max(0, wrap_region->x + side_safety_padding);
+  margins.right = std::max(0, video_width - (wrap_region->x + wrap_region->w) + side_safety_padding);
+  margins.vertical = std::max(0, video_height - (wrap_region->y + wrap_region->h) + job.subtitle_margin);
+  return margins;
+}
+
+bool shouldUseAbsoluteAssPositioning(const RenderJob& job, const std::optional<Region>& wrap_region) {
+  return wrap_region.has_value() && (!job.subtitle_srt.empty() || !job.subtitle_text.empty());
 }
 
 std::string buildAssScript(
@@ -345,11 +443,14 @@ std::string buildAssScript(
   const std::string text_color = toAssColor(job.subtitle_text_color);
   const std::string outline_color = toAssColor(job.subtitle_outline_color);
   const std::string back_color = toAssColor(job.subtitle_back_color);
+  const AssMargins ass_margins = computeAssMargins(job, wrap_region, video_width, video_height, subtitle_font_pixels);
+  const bool use_region_layout = wrap_region.has_value();
   script += "Style: Default," + job.subtitle_font_family + "," + std::to_string(subtitle_font_pixels) +
             "," + text_color + ",&H000000FF," + outline_color + "," + back_color + "," +
             (job.subtitle_bold ? "-1" : "0") + "," +
             (job.subtitle_italic ? "-1" : "0") + ",0,0,100,100,0,0,1," + std::to_string(job.subtitle_outline) +
-            "," + std::to_string(job.subtitle_shadow) + ",2,20,20," + std::to_string(job.subtitle_margin) + ",1\n";
+            "," + std::to_string(job.subtitle_shadow) + ",2," + std::to_string(ass_margins.left) + "," +
+            std::to_string(ass_margins.right) + "," + std::to_string(ass_margins.vertical) + ",1\n";
   script += "[Events]\n";
   script += "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n";
   for (const SubtitleCue& cue : cues) {
@@ -357,11 +458,35 @@ std::string buildAssScript(
     if (job.subtitle_uppercase) {
       normalized_text = uppercaseUnicode(normalized_text);
     }
-    const std::string wrapped_text = wrap_region.has_value()
-                                         ? wrapCueText(normalized_text, wrap_region->w, job.subtitle_margin, subtitle_font_pixels)
-                                         : normalized_text;
-    script += "Dialogue: 0," + formatAssTime(cue.start) + "," + formatAssTime(cue.end) +
-              ",Default,,0,0," + std::to_string(job.subtitle_margin) + ",," + escapeAssText(wrapped_text) + "\n";
+    if (use_region_layout) {
+      const std::vector<std::string> lines = wrapCueTextToLines(
+          normalized_text,
+          wrap_region->w,
+          job.subtitle_margin,
+          subtitle_font_pixels,
+          job.subtitle_outline,
+          job.subtitle_bold,
+          job.subtitle_italic);
+      const int line_height = std::max(
+          static_cast<int>(std::lround(static_cast<float>(subtitle_font_pixels) * 1.18f)) + job.subtitle_outline * 2 +
+              job.subtitle_shadow,
+          subtitle_font_pixels + 4);
+      const int total_height = static_cast<int>(lines.size()) * line_height;
+      const int top_padding = std::max(job.subtitle_margin, job.subtitle_outline * 2);
+      const int available_height = std::max(wrap_region->h - top_padding * 2, line_height);
+      const int top_y = wrap_region->y + top_padding + std::max(available_height - total_height, 0) / 2;
+      const int center_x = wrap_region->x + wrap_region->w / 2;
+      for (size_t line_index = 0; line_index < lines.size(); ++line_index) {
+        const int line_y = top_y + static_cast<int>(line_index) * line_height;
+        script += "Dialogue: 0," + formatAssTime(cue.start) + "," + formatAssTime(cue.end) +
+                  ",Default,,0,0,0,,{\\an8\\q2\\pos(" + std::to_string(center_x) + "," + std::to_string(line_y) +
+                  ")}" + escapeAssText(lines[line_index]) + "\n";
+      }
+    } else {
+      script += "Dialogue: 0," + formatAssTime(cue.start) + "," + formatAssTime(cue.end) +
+                ",Default,," + std::to_string(ass_margins.left) + "," + std::to_string(ass_margins.right) + "," +
+                std::to_string(ass_margins.vertical) + ",,{\\q2}" + escapeAssText(normalized_text) + "\n";
+    }
   }
   return script;
 }
@@ -378,6 +503,7 @@ struct AssSubtitleRenderer::Impl {
   int video_width = 0;
   int video_height = 0;
   int subtitle_font_pixels = 0;
+  bool use_absolute_ass_positioning = false;
 };
 
 AssSubtitleRenderer::AssSubtitleRenderer() : impl_(std::make_unique<Impl>()) {
@@ -434,6 +560,7 @@ void AssSubtitleRenderer::initialize(const RenderJob& job, int video_width, int 
   }
 
   const std::optional<Region> wrap_region = job.regions.empty() ? std::nullopt : std::optional<Region>(job.regions.front());
+  impl_->use_absolute_ass_positioning = shouldUseAbsoluteAssPositioning(job, wrap_region);
   const std::string ass_script = buildAssScript(
       job,
       cues,
@@ -523,14 +650,19 @@ SubtitleOverlay AssSubtitleRenderer::render(double timestamp_seconds, const Regi
   overlay.width = max_x - min_x;
   overlay.height = max_y - min_y;
   overlay.stride = overlay.width;
-  overlay.x = std::clamp(
-      anchor_region->x + std::max(anchor_region->w - overlay.width, 0) / 2,
-      0,
-      std::max(impl_->video_width - overlay.width, 0));
-  overlay.y = std::clamp(
-      anchor_region->y + std::max(anchor_region->h - overlay.height, 0) / 2,
-      0,
-      std::max(impl_->video_height - overlay.height, 0));
+  if (impl_->use_absolute_ass_positioning) {
+    overlay.x = std::clamp(min_x, 0, std::max(impl_->video_width - overlay.width, 0));
+    overlay.y = std::clamp(min_y, 0, std::max(impl_->video_height - overlay.height, 0));
+  } else {
+    overlay.x = std::clamp(
+        anchor_region->x + std::max(anchor_region->w - overlay.width, 0) / 2,
+        0,
+        std::max(impl_->video_width - overlay.width, 0));
+    overlay.y = std::clamp(
+        anchor_region->y + std::max(anchor_region->h - overlay.height, 0) / 2,
+        0,
+        std::max(impl_->video_height - overlay.height, 0));
+  }
   overlay.opacity = impl_->job.subtitle_opacity;
   overlay.enabled = overlay.width > 0 && overlay.height > 0;
   if (!overlay.enabled) {

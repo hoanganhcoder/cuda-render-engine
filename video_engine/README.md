@@ -37,6 +37,8 @@ sudo apt-get install -y \
   libavcodec-dev \
   libavutil-dev \
   libswscale-dev \
+  libfreetype6-dev \
+  libharfbuzz-dev \
   python3-dev \
   python3-pip \
   nvidia-cuda-toolkit
@@ -68,6 +70,12 @@ scripts\build_windows.bat --ninja --cuda-root "C:\Program Files\NVIDIA GPU Compu
 ```
 
 If you vendor FFmpeg locally, place it under `video_engine/ffmpeg-dev/` with `include/` and `lib/`.
+
+Text rendering backends:
+
+- preferred subtitle text-box path: `FreeType + HarfBuzz` (`TextBoxRenderer`)
+- fallback subtitle path: `libass`
+- final fallback: built-in bitmap renderer
 `CMakeLists.txt` prefers that local tree before falling back to `pkg-config`.
 
 Run:
@@ -212,7 +220,7 @@ Nested job layout:
 - `subtitle.size`, `watermark.size`: `%` of video height, not pixels
 - `subtitle.size` default is `1.5` and `subtitle.italic` default is `true`
 - long subtitle text auto-wraps inside `subtitle.regions[*].w` and stays centered
-- `subtitle.upper`, `watermark.upper`: uppercase ASCII letters before rendering
+- `subtitle.upper`, `watermark.upper`: Unicode-aware uppercase before rendering
 - `subtitle.bold`, `subtitle.italic`, `subtitle.color`
 - `subtitle.outline_color`, `subtitle.back_color`, `subtitle.outline`, `subtitle.shadow`
 - `subtitle.gaussian_blur`: enable Gaussian blur over subtitle regions
@@ -226,8 +234,9 @@ Nested job layout:
 
 Subtitle rendering path:
 
-- preferred path: `libass + FreeType + Fontconfig` for Unicode, bold, italic, outline, shadow, and nicer typography
-- fallback path: built-in bitmap renderer when `libass` is unavailable at build time
+- preferred subtitle text-box path: `TextBoxRenderer (FreeType + HarfBuzz)` for region-based layout and explicit line breaking
+- fallback subtitle path: `libass`
+- final fallback path: built-in bitmap renderer
 
 Recommended "fansub-style" defaults:
 

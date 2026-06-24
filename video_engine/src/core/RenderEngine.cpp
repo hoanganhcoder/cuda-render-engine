@@ -161,13 +161,16 @@ bool RenderEngine::render(const RenderJob& input_job) {
     for (Region& region : job.regions) {
       region.clampToBounds(job.width, job.height);
     }
+    text_box_renderer_.initialize(job, job.width, job.height);
     ass_subtitle_renderer_.initialize(job, job.width, job.height);
     watermark_renderer_.initialize(job, job.width, job.height);
     if (!job.subtitle_srt.empty() || !job.subtitle_text.empty()) {
-      if (ass_subtitle_renderer_.available()) {
+      if (text_box_renderer_.available()) {
+        Logger::info("Using TextBoxRenderer subtitle renderer.");
+      } else if (ass_subtitle_renderer_.available()) {
         Logger::info("Using libass subtitle renderer.");
       } else {
-        Logger::warn("libass renderer unavailable, falling back to built-in bitmap subtitle renderer.");
+        Logger::warn("TextBoxRenderer/libass unavailable, falling back to built-in bitmap subtitle renderer.");
       }
     }
 
@@ -277,7 +280,9 @@ SubtitleOverlay RenderEngine::buildSubtitleOverlay(
     double timestamp_seconds) const {
   std::vector<SubtitleOverlay> overlays;
   if (!active_regions.empty()) {
-    if (ass_subtitle_renderer_.available()) {
+    if (text_box_renderer_.available()) {
+      overlays.push_back(text_box_renderer_.render(timestamp_seconds, &active_regions.front()));
+    } else if (ass_subtitle_renderer_.available()) {
       overlays.push_back(ass_subtitle_renderer_.render(timestamp_seconds, &active_regions.front()));
     } else if (!job.subtitle_text.empty()) {
       overlays.push_back(SubtitleRenderer::buildOverlay(

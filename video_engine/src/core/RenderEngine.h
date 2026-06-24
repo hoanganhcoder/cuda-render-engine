@@ -11,6 +11,7 @@ extern "C" {
 #include "core/AssSubtitleRenderer.h"
 #include "core/RenderJob.h"
 #include "core/SubtitleOverlay.h"
+#include "core/TextBoxRenderer.h"
 #include "core/WatermarkRenderer.h"
 #include "cuda/CudaContext.h"
 #include "cuda/CudaBuffer.h"
@@ -39,6 +40,7 @@ private:
   CudaBuffer subtitle_luma_buffer_;
   CudaBuffer subtitle_chroma_u_buffer_;
   CudaBuffer subtitle_chroma_v_buffer_;
+  TextBoxRenderer text_box_renderer_;
   AssSubtitleRenderer ass_subtitle_renderer_;
   WatermarkRenderer watermark_renderer_;
   CudaSubtitleRectEffect subtitle_effect_;

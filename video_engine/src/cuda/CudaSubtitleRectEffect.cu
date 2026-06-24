@@ -69,11 +69,12 @@ __device__ float softEdgeDistance(int coord, int start, int size) {
 __device__ float edgeMask(const DeviceRegion& region, int x, int y) {
   const float dx = softEdgeDistance(x, region.x, region.w);
   const float dy = softEdgeDistance(y, region.y, region.h);
-  const float distance = sqrtf(dx * dx + dy * dy);
+  const float distance = fmaxf(dx, dy);
   if (region.feather <= 0.0f) {
     return distance <= 0.0f ? 1.0f : 0.0f;
   }
-  return clamp01(1.0f - distance / region.feather);
+  const float t = clamp01(distance / region.feather);
+  return 1.0f - (t * t * (3.0f - 2.0f * t));
 }
 
 __device__ float normalizeByte(uint8_t value) {
@@ -89,7 +90,7 @@ __device__ float mixFloat(float a, float b, float amount) {
 }
 
 __device__ int computeBlurRadius(const DeviceRegion& region) {
-  return clampInt(static_cast<int>(1.5f + region.horizontal_blur * 8.0f + region.feather * 0.035f), 1, 6);
+  return clampInt(static_cast<int>(2.0f + region.horizontal_blur * 14.0f + region.feather * 0.05f), 2, 12);
 }
 
 __device__ float gaussianWeight(int dx, int dy, float sigma_x, float sigma_y) {
@@ -144,8 +145,8 @@ __device__ float sampleGaussianLuma(
     float video_scale,
     bool flip_horizontal) {
   const int radius = computeBlurRadius(region);
-  const float sigma_x = fmaxf(0.9f, static_cast<float>(radius) * 0.65f);
-  const float sigma_y = fmaxf(0.9f, sigma_x * fmaxf(region.vertical_stretch, 0.6f));
+  const float sigma_x = fmaxf(1.1f, static_cast<float>(radius) * 0.85f);
+  const float sigma_y = fmaxf(1.1f, sigma_x * fmaxf(region.vertical_stretch, 0.85f));
   float accum = 0.0f;
   float total_weight = 0.0f;
   for (int dy = -radius; dy <= radius; ++dy) {
@@ -174,9 +175,9 @@ __device__ uchar2 sampleGaussianChroma(
   const int chroma_height = height / 2;
   const int center_x = mapOutputToSourceCoord(x, width, video_scale, flip_horizontal, true) / 2;
   const int center_y = mapOutputToSourceCoord(y, height, video_scale, false, false) / 2;
-  const int radius = clampInt((computeBlurRadius(region) + 1) / 2, 1, 6);
-  const float sigma_x = fmaxf(0.8f, static_cast<float>(radius) * 0.65f);
-  const float sigma_y = fmaxf(0.8f, sigma_x * fmaxf(region.vertical_stretch, 0.6f));
+  const int radius = clampInt((computeBlurRadius(region) + 1) / 2, 1, 8);
+  const float sigma_x = fmaxf(1.0f, static_cast<float>(radius) * 0.8f);
+  const float sigma_y = fmaxf(1.0f, sigma_x * fmaxf(region.vertical_stretch, 0.85f));
 
   float accum_u = 0.0f;
   float accum_v = 0.0f;
