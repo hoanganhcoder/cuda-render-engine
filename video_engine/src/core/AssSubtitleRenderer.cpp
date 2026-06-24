@@ -334,6 +334,7 @@ std::string buildAssScript(
   script.reserve(4096);
   script += "[Script Info]\n";
   script += "ScriptType: v4.00+\n";
+  script += "WrapStyle: 2\n";
   script += "PlayResX: " + std::to_string(video_width) + "\n";
   script += "PlayResY: " + std::to_string(video_height) + "\n";
   script += "[V4+ Styles]\n";
