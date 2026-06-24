@@ -226,12 +226,14 @@ std::string normalizeCueText(const std::string& text, bool uppercase) {
 #if defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
 struct GlyphCacheKey {
   uint32_t glyph_index = 0;
+  int font_pixels = 0;
   int outline = 0;
   bool bold = false;
   bool italic = false;
 
   bool operator==(const GlyphCacheKey& other) const {
-    return glyph_index == other.glyph_index && outline == other.outline && bold == other.bold && italic == other.italic;
+    return glyph_index == other.glyph_index && font_pixels == other.font_pixels && outline == other.outline &&
+           bold == other.bold && italic == other.italic;
   }
 };
 
@@ -276,6 +278,7 @@ struct OverlayCacheKey {
 struct GlyphCacheKeyHasher {
   size_t operator()(const GlyphCacheKey& key) const {
     size_t hash = static_cast<size_t>(key.glyph_index);
+    hash = hash * 1315423911u + static_cast<size_t>(key.font_pixels);
     hash = hash * 1315423911u + static_cast<size_t>(key.outline);
     hash = hash * 1315423911u + static_cast<size_t>(key.bold);
     hash = hash * 1315423911u + static_cast<size_t>(key.italic);
@@ -295,9 +298,9 @@ struct OverlayCacheKeyHasher {
 };
 
 int computeHorizontalSafetyPadding(int margin, int font_pixels, int outline, bool italic) {
-  const int outline_padding = std::max(outline * 3, 6);
-  const int italic_padding = italic ? std::max(font_pixels / 3, 10) : std::max(font_pixels / 6, 4);
-  return std::max(margin * 2, outline_padding + italic_padding);
+  const int outline_padding = std::max(outline * 2, 4);
+  const int italic_padding = italic ? std::max(font_pixels / 8, 4) : 2;
+  return std::max(margin, outline_padding + italic_padding);
 }
 
 void blendOverlayPixel(SubtitleOverlay& overlay, int x, int y, float alpha, const RgbaColor& color) {
@@ -445,85 +448,138 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
   const SubtitleCue& cue = impl_->cues[cue_index];
   const std::string normalized_text = normalizeCueText(cue.text, impl_->job.subtitle_uppercase);
-  const int side_padding = computeHorizontalSafetyPadding(
-      impl_->job.subtitle_margin,
-      impl_->font_pixels,
-      impl_->job.subtitle_outline,
-      impl_->job.subtitle_italic);
-  const int usable_width = std::max(anchor_region->w - side_padding * 2, impl_->font_pixels * 4);
-
-  auto get_line_layout = [&](const std::string& line_text) -> const LineLayout& {
-    const std::string cache_id =
-        line_text + "|" + std::to_string(usable_width) + "|" + std::to_string(impl_->job.subtitle_outline) + "|" +
-        std::to_string(impl_->job.subtitle_bold) + "|" + std::to_string(impl_->job.subtitle_italic);
-    auto found = impl_->line_cache.find(cache_id);
-    if (found != impl_->line_cache.end()) {
-      return found->second;
-    }
-
-    hb_buffer_t* buffer = hb_buffer_create();
-    hb_buffer_add_utf8(buffer, line_text.c_str(), static_cast<int>(line_text.size()), 0, static_cast<int>(line_text.size()));
-    hb_buffer_set_direction(buffer, HB_DIRECTION_LTR);
-    hb_buffer_set_script(buffer, HB_SCRIPT_LATIN);
-    hb_buffer_set_language(buffer, hb_language_from_string("vi", -1));
-    hb_shape(impl_->hb_font, buffer, nullptr, 0);
-
-    unsigned int glyph_count = 0;
-    const hb_glyph_info_t* infos = hb_buffer_get_glyph_infos(buffer, &glyph_count);
-    const hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer, &glyph_count);
-
-    LineLayout layout;
-    layout.text = line_text;
-    float pen_x = 0.0f;
-    for (unsigned int glyph_index = 0; glyph_index < glyph_count; ++glyph_index) {
-      ShapedGlyph glyph{};
-      glyph.glyph_index = infos[glyph_index].codepoint;
-      glyph.x_offset = static_cast<float>(positions[glyph_index].x_offset) / 64.0f;
-      glyph.y_offset = static_cast<float>(positions[glyph_index].y_offset) / 64.0f;
-      glyph.x_advance = static_cast<float>(positions[glyph_index].x_advance) / 64.0f;
-      layout.glyphs.push_back(glyph);
-      pen_x += glyph.x_advance;
-    }
-    layout.width = pen_x;
-    hb_buffer_destroy(buffer);
-    return impl_->line_cache.emplace(cache_id, std::move(layout)).first->second;
+  auto set_font_size = [&](int font_pixels) {
+    FT_Set_Pixel_Sizes(impl_->ft_face, 0, static_cast<FT_UInt>(font_pixels));
+    hb_ft_font_changed(impl_->hb_font);
   };
 
-  std::vector<std::string> lines;
-  {
-    std::istringstream input(normalized_text);
-    std::string raw_line;
-    while (std::getline(input, raw_line, '\n')) {
-      std::istringstream words(raw_line);
-      std::string word;
-      std::string current;
-      while (words >> word) {
-        const std::string candidate = current.empty() ? word : current + " " + word;
-        const LineLayout& candidate_layout = get_line_layout(candidate);
-        if (!current.empty() && candidate_layout.width > static_cast<float>(usable_width)) {
+  struct FittedLayout {
+    int font_pixels = 0;
+    int usable_width = 0;
+    int line_height = 0;
+    int top_padding = 0;
+    std::vector<std::string> lines;
+  };
+
+  auto shape_lines_for_font = [&](int font_pixels) -> FittedLayout {
+    set_font_size(font_pixels);
+    const int dynamic_side_padding = computeHorizontalSafetyPadding(
+        impl_->job.subtitle_margin,
+        font_pixels,
+        impl_->job.subtitle_outline,
+        impl_->job.subtitle_italic);
+    const int dynamic_usable_width = std::max(1, anchor_region->w - dynamic_side_padding * 2);
+
+    auto get_line_layout = [&](const std::string& line_text) -> const LineLayout& {
+      const std::string cache_id =
+          line_text + "|" + std::to_string(dynamic_usable_width) + "|" + std::to_string(font_pixels) + "|" +
+          std::to_string(impl_->job.subtitle_outline) + "|" + std::to_string(impl_->job.subtitle_bold) + "|" +
+          std::to_string(impl_->job.subtitle_italic);
+      auto found = impl_->line_cache.find(cache_id);
+      if (found != impl_->line_cache.end()) {
+        return found->second;
+      }
+
+      hb_buffer_t* buffer = hb_buffer_create();
+      hb_buffer_add_utf8(buffer, line_text.c_str(), static_cast<int>(line_text.size()), 0, static_cast<int>(line_text.size()));
+      hb_buffer_set_direction(buffer, HB_DIRECTION_LTR);
+      hb_buffer_set_script(buffer, HB_SCRIPT_LATIN);
+      hb_buffer_set_language(buffer, hb_language_from_string("vi", -1));
+      hb_shape(impl_->hb_font, buffer, nullptr, 0);
+
+      unsigned int glyph_count = 0;
+      const hb_glyph_info_t* infos = hb_buffer_get_glyph_infos(buffer, &glyph_count);
+      const hb_glyph_position_t* positions = hb_buffer_get_glyph_positions(buffer, &glyph_count);
+
+      LineLayout layout;
+      layout.text = line_text;
+      float pen_x = 0.0f;
+      float min_x = std::numeric_limits<float>::max();
+      float max_x = std::numeric_limits<float>::lowest();
+      for (unsigned int glyph_index = 0; glyph_index < glyph_count; ++glyph_index) {
+        ShapedGlyph glyph{};
+        glyph.glyph_index = infos[glyph_index].codepoint;
+        glyph.x_offset = static_cast<float>(positions[glyph_index].x_offset) / 64.0f;
+        glyph.y_offset = static_cast<float>(positions[glyph_index].y_offset) / 64.0f;
+        glyph.x_advance = static_cast<float>(positions[glyph_index].x_advance) / 64.0f;
+        layout.glyphs.push_back(glyph);
+        if (FT_Load_Glyph(impl_->ft_face, glyph.glyph_index, FT_LOAD_DEFAULT) == 0) {
+          const float glyph_left = pen_x + glyph.x_offset + static_cast<float>(impl_->ft_face->glyph->metrics.horiBearingX >> 6);
+          const float glyph_right = glyph_left + static_cast<float>(impl_->ft_face->glyph->metrics.width >> 6);
+          min_x = std::min(min_x, glyph_left);
+          max_x = std::max(max_x, glyph_right);
+        }
+        pen_x += glyph.x_advance;
+      }
+      layout.width = (min_x <= max_x) ? (max_x - min_x) : pen_x;
+      hb_buffer_destroy(buffer);
+      return impl_->line_cache.emplace(cache_id, std::move(layout)).first->second;
+    };
+
+    std::vector<std::string> lines;
+    {
+      std::istringstream input(normalized_text);
+      std::string raw_line;
+      while (std::getline(input, raw_line, '\n')) {
+        std::istringstream words(raw_line);
+        std::string word;
+        std::string current;
+        while (words >> word) {
+          const std::string candidate = current.empty() ? word : current + " " + word;
+          const LineLayout& candidate_layout = get_line_layout(candidate);
+          if (!current.empty() && candidate_layout.width > static_cast<float>(dynamic_usable_width)) {
+            lines.push_back(current);
+            current = word;
+          } else {
+            current = candidate;
+          }
+        }
+        if (!current.empty()) {
           lines.push_back(current);
-          current = word;
-        } else {
-          current = candidate;
+        } else if (raw_line.empty()) {
+          lines.emplace_back();
         }
       }
-      if (!current.empty()) {
-        lines.push_back(current);
-      } else if (raw_line.empty()) {
-        lines.emplace_back();
-      }
     }
-  }
-  if (lines.empty()) {
-    lines.push_back(normalized_text);
+    if (lines.empty()) {
+      lines.push_back(normalized_text);
+    }
+
+    const int ascender = std::max<int>(1, static_cast<int>(impl_->ft_face->size->metrics.ascender >> 6));
+    const int line_height = std::max<int>(
+        ascender + static_cast<int>(impl_->job.subtitle_outline) * 2 + impl_->job.subtitle_shadow + 4,
+        static_cast<int>(impl_->ft_face->size->metrics.height >> 6));
+    const int top_padding = std::max(impl_->job.subtitle_margin, impl_->job.subtitle_outline * 2 + impl_->job.subtitle_shadow);
+    return FittedLayout{font_pixels, dynamic_usable_width, line_height, top_padding, std::move(lines)};
+  };
+
+  const int requested_font_pixels = impl_->font_pixels;
+  const int min_font_pixels = std::max(12, static_cast<int>(std::floor(static_cast<float>(requested_font_pixels) * 0.55f)));
+  FittedLayout fitted = shape_lines_for_font(requested_font_pixels);
+  for (int font_pixels = requested_font_pixels; font_pixels >= min_font_pixels; --font_pixels) {
+    FittedLayout candidate = shape_lines_for_font(font_pixels);
+    const int total_height_candidate = candidate.line_height * static_cast<int>(candidate.lines.size());
+    if (total_height_candidate <= std::max(anchor_region->h - candidate.top_padding * 2, candidate.line_height)) {
+      fitted = std::move(candidate);
+      break;
+    }
+    fitted = std::move(candidate);
   }
 
+  set_font_size(fitted.font_pixels);
   const int ascender = std::max<int>(1, static_cast<int>(impl_->ft_face->size->metrics.ascender >> 6));
-  const int line_height = std::max<int>(
-      ascender + static_cast<int>(impl_->job.subtitle_outline) * 2 + impl_->job.subtitle_shadow + 4,
-      static_cast<int>(impl_->ft_face->size->metrics.height >> 6));
+  const auto get_line_layout = [&](const std::string& line_text) -> const LineLayout& {
+    const std::string cache_id =
+        line_text + "|" + std::to_string(fitted.usable_width) + "|" + std::to_string(fitted.font_pixels) + "|" +
+        std::to_string(impl_->job.subtitle_outline) + "|" + std::to_string(impl_->job.subtitle_bold) + "|" +
+        std::to_string(impl_->job.subtitle_italic);
+    return impl_->line_cache.at(cache_id);
+  };
+
+  const std::vector<std::string>& lines = fitted.lines;
+  const int line_height = fitted.line_height;
+  const int top_padding = fitted.top_padding;
   const int total_height = line_height * static_cast<int>(lines.size());
-  const int top_padding = std::max(impl_->job.subtitle_margin, impl_->job.subtitle_outline * 2 + impl_->job.subtitle_shadow);
   const int usable_height = std::max(anchor_region->h - top_padding * 2, line_height);
   const int base_top = anchor_region->y + top_padding + std::max(usable_height - total_height, 0) / 2;
 
@@ -542,7 +598,12 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
   int max_y = std::numeric_limits<int>::min();
 
   auto build_glyph = [&](uint32_t glyph_index) -> const GlyphCacheValue& {
-    const GlyphCacheKey key{glyph_index, impl_->job.subtitle_outline, impl_->job.subtitle_bold, impl_->job.subtitle_italic};
+    const GlyphCacheKey key{
+        glyph_index,
+        fitted.font_pixels,
+        impl_->job.subtitle_outline,
+        impl_->job.subtitle_bold,
+        impl_->job.subtitle_italic};
     auto found = impl_->glyph_cache.find(key);
     if (found != impl_->glyph_cache.end()) {
       return found->second;
@@ -632,6 +693,37 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
   if (min_x >= max_x || min_y >= max_y) {
     return overlay;
+  }
+
+  const int safe_left = anchor_region->x + std::max(impl_->job.subtitle_margin / 2, 2);
+  const int safe_top = anchor_region->y + std::max(impl_->job.subtitle_margin / 2, 2);
+  const int safe_right = anchor_region->x + anchor_region->w - std::max(impl_->job.subtitle_margin / 2, 2);
+  const int safe_bottom = anchor_region->y + anchor_region->h - std::max(impl_->job.subtitle_margin / 2, 2);
+
+  int shift_x = 0;
+  int shift_y = 0;
+  if (min_x < safe_left) {
+    shift_x = safe_left - min_x;
+  } else if (max_x > safe_right) {
+    shift_x = safe_right - max_x;
+  }
+  if (min_y < safe_top) {
+    shift_y = safe_top - min_y;
+  } else if (max_y > safe_bottom) {
+    shift_y = safe_bottom - max_y;
+  }
+
+  if (shift_x != 0 || shift_y != 0) {
+    min_x += shift_x;
+    max_x += shift_x;
+    min_y += shift_y;
+    max_y += shift_y;
+    for (DrawGlyph& draw : draw_glyphs) {
+      draw.fill_x += shift_x;
+      draw.fill_y += shift_y;
+      draw.outline_x += shift_x;
+      draw.outline_y += shift_y;
+    }
   }
 
   overlay.enabled = true;
