@@ -309,7 +309,8 @@ std::vector<std::string> wrapWordsToLines(const std::string& text, int max_chars
 }
 
 std::string wrapCueText(const std::string& text, int region_width, int margin, int font_pixels) {
-  const int usable_width = std::max(region_width - margin * 2, font_pixels * 4);
+  const int side_safety_padding = std::max(margin * 2, std::max(font_pixels / 2, 12));
+  const int usable_width = std::max(region_width - side_safety_padding * 2, font_pixels * 4);
   const float estimated_char_width = std::max(static_cast<float>(font_pixels) * 0.33f, 1.0f);
   const int max_chars_per_line = std::max(1, static_cast<int>(static_cast<float>(usable_width) / estimated_char_width));
   const std::vector<std::string> lines = wrapWordsToLines(text, max_chars_per_line);
