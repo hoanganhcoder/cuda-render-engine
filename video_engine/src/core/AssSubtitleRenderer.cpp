@@ -2,6 +2,8 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <filesystem>
+#include <fstream>
 #include <cstdlib>
 #include <cmath>
 #include <cstring>
@@ -48,6 +50,38 @@ std::string escapeAssText(const std::string& text) {
     }
   }
   return escaped;
+}
+
+std::vector<char> readBinaryFile(const std::string& path) {
+  std::ifstream input(path, std::ios::binary);
+  if (!input) {
+    throw std::runtime_error("Failed to open font file: " + path);
+  }
+
+  input.seekg(0, std::ios::end);
+  const std::streamoff size = input.tellg();
+  input.seekg(0, std::ios::beg);
+  if (size <= 0) {
+    throw std::runtime_error("Font file is empty: " + path);
+  }
+
+  std::vector<char> data(static_cast<size_t>(size));
+  if (!input.read(data.data(), size)) {
+    throw std::runtime_error("Failed to read font file: " + path);
+  }
+  return data;
+}
+
+std::string fontAttachmentName(const RenderJob& job) {
+  if (job.subtitle_font_path.empty()) {
+    return {};
+  }
+
+  const std::filesystem::path path(job.subtitle_font_path);
+  if (path.has_filename()) {
+    return path.filename().string();
+  }
+  return path.string();
 }
 
 char32_t decodeUtf8CodePoint(const std::string& text, size_t& index) {
@@ -389,13 +423,6 @@ void AssSubtitleRenderer::initialize(const RenderJob& job, int video_width, int 
 
   ass_set_frame_size(impl_->renderer, video_width, video_height);
   ass_set_storage_size(impl_->renderer, video_width, video_height);
-  ass_set_fonts(
-      impl_->renderer,
-      job.subtitle_font_path.empty() ? nullptr : job.subtitle_font_path.c_str(),
-      job.subtitle_font_family.empty() ? "Noto Sans" : job.subtitle_font_family.c_str(),
-      1,
-      nullptr,
-      1);
 
   std::vector<SubtitleCue> cues;
   if (!job.subtitle_srt.empty()) {
@@ -421,6 +448,25 @@ void AssSubtitleRenderer::initialize(const RenderJob& job, int video_width, int 
   if (!impl_->track) {
     throw std::runtime_error("Failed to load subtitles into libass track.");
   }
+
+  std::vector<char> attached_font_data;
+  if (!job.subtitle_font_path.empty()) {
+    attached_font_data = readBinaryFile(job.subtitle_font_path);
+    const std::string attachment_name = fontAttachmentName(job);
+    ass_add_font(
+        impl_->library,
+        attachment_name.empty() ? job.subtitle_font_path.c_str() : attachment_name.c_str(),
+        attached_font_data.data(),
+        static_cast<int>(attached_font_data.size()));
+  }
+
+  ass_set_fonts(
+      impl_->renderer,
+      job.subtitle_font_path.empty() ? nullptr : job.subtitle_font_path.c_str(),
+      job.subtitle_font_family.empty() ? "Noto Sans" : job.subtitle_font_family.c_str(),
+      1,
+      nullptr,
+      1);
 
   if (impl_->track->n_styles > 0) {
     ASS_Style& style = impl_->track->styles[0];
