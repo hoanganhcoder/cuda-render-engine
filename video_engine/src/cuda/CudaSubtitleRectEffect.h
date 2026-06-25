@@ -9,6 +9,7 @@ extern "C" {
 }
 
 #include "core/Region.h"
+#include "cuda/CudaBuffer.h"
 
 namespace video_engine {
 
@@ -44,6 +45,10 @@ public:
       bool gaussian_blur,
       const DeviceSubtitleOverlay& text_overlay,
       cudaStream_t stream) const;
+
+private:
+  mutable CudaBuffer temp_luma_;
+  mutable CudaBuffer temp_chroma_;
 };
 
 }  // namespace video_engine
