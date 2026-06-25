@@ -15,6 +15,7 @@
 #include <utility>
 #include <vector>
 
+#include "core/Logger.h"
 #include "core/SrtParser.h"
 
 #if defined(VIDEO_ENGINE_HAS_PANGO)
@@ -522,6 +523,17 @@ void TextBoxRenderer::initialize(const RenderJob& job, int video_width, int vide
       }
 #endif
     }
+    {
+      std::ostringstream stream;
+      stream << "TextBoxRenderer using Pango family=\"" << impl_->resolved_font_family << "\"";
+      if (!job.subtitle_font_path.empty()) {
+        stream << " font_ttf=\"" << job.subtitle_font_path << "\"";
+      }
+      stream << " exact_face=" << (impl_->exact_font_face ? "true" : "false")
+             << " bold=" << (impl_->exact_font_face_bold ? "true" : "false")
+             << " italic=" << (impl_->exact_font_face_italic ? "true" : "false");
+      Logger::info(stream.str());
+    }
     impl_->prefer_pango = true;
     available_ = true;
     return;
@@ -562,6 +574,13 @@ void TextBoxRenderer::initialize(const RenderJob& job, int video_width, int vide
   hb_ft_font_set_load_flags(impl_->hb_font, kTextLoadFlags);
   hb_ft_font_changed(impl_->hb_font);
 
+  {
+    std::ostringstream stream;
+    stream << "TextBoxRenderer using FreeType/HarfBuzz font_path=\"" << resolved_font_path
+           << "\" synthetic_bold=" << (impl_->apply_synthetic_bold ? "true" : "false")
+           << " synthetic_italic=" << (impl_->apply_synthetic_italic ? "true" : "false");
+    Logger::info(stream.str());
+  }
   available_ = true;
 #endif
 }
