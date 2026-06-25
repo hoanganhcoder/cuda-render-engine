@@ -46,6 +46,11 @@ struct RgbaColor {
   float alpha = 1.0f;
 };
 
+#if defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
+constexpr int kTextLoadFlags = FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP | FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_LIGHT;
+constexpr FT_Render_Mode kTextRenderMode = FT_RENDER_MODE_LIGHT;
+#endif
+
 void rgbToYuv(uint8_t red, uint8_t green, uint8_t blue, uint8_t& y, uint8_t& u, uint8_t& v) {
   const float yf = 0.299f * red + 0.587f * green + 0.114f * blue;
   const float uf = -0.168736f * red - 0.331264f * green + 0.5f * blue + 128.0f;
@@ -438,6 +443,8 @@ void TextBoxRenderer::initialize(const RenderJob& job, int video_width, int vide
   if (impl_->hb_font == nullptr) {
     return;
   }
+  hb_ft_font_set_load_flags(impl_->hb_font, kTextLoadFlags);
+  hb_ft_font_changed(impl_->hb_font);
 
   available_ = true;
 #endif
@@ -535,7 +542,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
         glyph.y_offset = static_cast<float>(positions[glyph_index].y_offset) / 64.0f;
         glyph.x_advance = static_cast<float>(positions[glyph_index].x_advance) / 64.0f;
         layout.glyphs.push_back(glyph);
-        if (FT_Load_Glyph(impl_->ft_face, glyph.glyph_index, FT_LOAD_DEFAULT) == 0) {
+        if (FT_Load_Glyph(impl_->ft_face, glyph.glyph_index, kTextLoadFlags) == 0) {
           const float glyph_left = pen_x + glyph.x_offset + static_cast<float>(impl_->ft_face->glyph->metrics.horiBearingX >> 6);
           const float glyph_right = glyph_left + static_cast<float>(impl_->ft_face->glyph->metrics.width >> 6);
           min_x = std::min(min_x, glyph_left);
@@ -717,7 +724,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
       return found->second;
     }
 
-    FT_Load_Glyph(impl_->ft_face, glyph_index, FT_LOAD_DEFAULT);
+    FT_Load_Glyph(impl_->ft_face, glyph_index, kTextLoadFlags);
     if (impl_->apply_synthetic_bold) {
       FT_GlyphSlot_Embolden(impl_->ft_face->glyph);
     }
@@ -727,7 +734,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
     FT_Glyph fill_glyph = nullptr;
     FT_Get_Glyph(impl_->ft_face->glyph, &fill_glyph);
-    FT_Glyph_To_Bitmap(&fill_glyph, FT_RENDER_MODE_NORMAL, nullptr, 1);
+    FT_Glyph_To_Bitmap(&fill_glyph, kTextRenderMode, nullptr, 1);
     const FT_BitmapGlyph fill_bitmap = reinterpret_cast<FT_BitmapGlyph>(fill_glyph);
 
     GlyphCacheValue value{};
@@ -738,7 +745,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     value.fill_alpha = flattenFtBitmap(fill_bitmap->bitmap);
 
     if (impl_->job.subtitle_outline > 0) {
-      FT_Load_Glyph(impl_->ft_face, glyph_index, FT_LOAD_DEFAULT);
+      FT_Load_Glyph(impl_->ft_face, glyph_index, kTextLoadFlags);
       if (impl_->apply_synthetic_bold) {
         FT_GlyphSlot_Embolden(impl_->ft_face->glyph);
       }
@@ -756,7 +763,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
           FT_STROKER_LINEJOIN_ROUND,
           0);
       FT_Glyph_StrokeBorder(&outline_glyph, stroker, 0, 1);
-      FT_Glyph_To_Bitmap(&outline_glyph, FT_RENDER_MODE_NORMAL, nullptr, 1);
+      FT_Glyph_To_Bitmap(&outline_glyph, kTextRenderMode, nullptr, 1);
       const FT_BitmapGlyph outline_bitmap = reinterpret_cast<FT_BitmapGlyph>(outline_glyph);
       value.outline_left = outline_bitmap->left;
       value.outline_top = outline_bitmap->top;
