@@ -17,6 +17,10 @@
 
 #include "core/SrtParser.h"
 
+#if defined(VIDEO_ENGINE_HAS_PANGO)
+#include <cairo.h>
+#include <pango/pangocairo.h>
+#endif
 #if defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
 #include <ft2build.h>
 #include FT_FREETYPE_H
@@ -45,6 +49,18 @@ struct RgbaColor {
   uint8_t blue = 255;
   float alpha = 1.0f;
 };
+
+#if defined(VIDEO_ENGINE_HAS_PANGO)
+PangoAlignment toPangoAlignment(const std::string& align_h) {
+  if (align_h == "left") {
+    return PANGO_ALIGN_LEFT;
+  }
+  if (align_h == "right") {
+    return PANGO_ALIGN_RIGHT;
+  }
+  return PANGO_ALIGN_CENTER;
+}
+#endif
 
 #if defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
 constexpr int kTextLoadFlags = FT_LOAD_DEFAULT | FT_LOAD_NO_BITMAP | FT_LOAD_FORCE_AUTOHINT | FT_LOAD_TARGET_LIGHT;
@@ -349,6 +365,9 @@ struct TextBoxRenderer::Impl {
   int video_height = 0;
   int font_pixels = 0;
   std::vector<SubtitleCue> cues;
+#if defined(VIDEO_ENGINE_HAS_PANGO)
+  bool prefer_pango = false;
+#endif
 #if defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
   FT_Library ft_library = nullptr;
   FT_Face ft_face = nullptr;
@@ -411,6 +430,18 @@ void TextBoxRenderer::initialize(const RenderJob& job, int video_width, int vide
   } else if (!job.subtitle_text.empty()) {
     impl_->cues.push_back(SubtitleCue{0.0, 1.0e12, job.subtitle_text});
   }
+
+#if defined(VIDEO_ENGINE_HAS_PANGO)
+  if (!impl_->cues.empty()) {
+    if (!job.subtitle_font_path.empty()) {
+      FcInit();
+      FcConfigAppFontAddFile(FcConfigGetCurrent(), reinterpret_cast<const FcChar8*>(job.subtitle_font_path.c_str()));
+    }
+    impl_->prefer_pango = true;
+    available_ = true;
+    return;
+  }
+#endif
 
 #if !defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
   return;
@@ -480,6 +511,164 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
   const SubtitleCue& cue = impl_->cues[cue_index];
   const std::string normalized_text = normalizeCueText(cue.text, impl_->job.subtitle_uppercase);
+
+#if defined(VIDEO_ENGINE_HAS_PANGO)
+  if (impl_->prefer_pango) {
+    const int surface_width = anchor_region->w;
+    const int surface_height = anchor_region->h;
+    if (surface_width <= 0 || surface_height <= 0) {
+      return overlay;
+    }
+
+    const int side_padding = std::max(
+        impl_->job.subtitle_padding_x,
+        computeHorizontalSafetyPadding(
+            std::max(impl_->job.subtitle_margin / 2, 0),
+            impl_->font_pixels,
+            impl_->job.subtitle_outline,
+            impl_->job.subtitle_italic));
+    const int top_padding = std::max(
+        impl_->job.subtitle_padding_y,
+        std::max(impl_->job.subtitle_margin / 2, impl_->job.subtitle_outline * 2 + impl_->job.subtitle_shadow));
+    const int usable_width = std::max(1, surface_width - side_padding * 2);
+    const int usable_height = std::max(1, surface_height - top_padding * 2);
+    const int requested_font_pixels = impl_->font_pixels;
+    const int min_font_pixels = std::max(12, static_cast<int>(std::floor(static_cast<float>(requested_font_pixels) * 0.55f)));
+
+    cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, surface_width, surface_height);
+    cairo_t* cr = cairo_create(surface);
+    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+    cairo_paint(cr);
+    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
+
+    PangoLayout* layout = pango_cairo_create_layout(cr);
+    PangoFontDescription* desc = pango_font_description_new();
+    pango_font_description_set_family(desc, impl_->job.subtitle_font_family.c_str());
+    pango_font_description_set_weight(desc, impl_->job.subtitle_bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
+    pango_font_description_set_style(desc, impl_->job.subtitle_italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
+    pango_layout_set_alignment(layout, toPangoAlignment(impl_->job.subtitle_align_h));
+    pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
+    pango_layout_set_width(layout, usable_width * PANGO_SCALE);
+    pango_layout_set_text(layout, normalized_text.c_str(), -1);
+
+    int fitted_font_pixels = requested_font_pixels;
+    int layout_width = 0;
+    int layout_height = 0;
+    for (int font_pixels = requested_font_pixels; font_pixels >= min_font_pixels; --font_pixels) {
+      pango_font_description_set_absolute_size(desc, font_pixels * PANGO_SCALE);
+      pango_layout_set_font_description(layout, desc);
+      pango_layout_context_changed(layout);
+      pango_layout_get_pixel_size(layout, &layout_width, &layout_height);
+      const bool width_ok = !impl_->job.subtitle_wrap || layout_width <= usable_width;
+      const bool height_ok = !impl_->job.subtitle_auto_fit || layout_height <= usable_height;
+      fitted_font_pixels = font_pixels;
+      if (width_ok && height_ok) {
+        break;
+      }
+    }
+
+    pango_font_description_set_absolute_size(desc, fitted_font_pixels * PANGO_SCALE);
+    pango_layout_set_font_description(layout, desc);
+    pango_layout_context_changed(layout);
+    pango_layout_get_pixel_size(layout, &layout_width, &layout_height);
+
+    std::string align_v = impl_->job.subtitle_align_v;
+    std::transform(align_v.begin(), align_v.end(), align_v.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    double origin_x = static_cast<double>(side_padding);
+    double origin_y = static_cast<double>(top_padding);
+    if (align_v == "middle") {
+      origin_y += std::max(usable_height - layout_height, 0) * 0.5;
+    } else if (align_v == "bottom") {
+      origin_y += std::max(usable_height - layout_height, 0);
+    }
+
+    const RgbaColor fill_color = parseHexColor(impl_->job.subtitle_text_color);
+    const RgbaColor outline_color = parseHexColor(impl_->job.subtitle_outline_color);
+    const double fill_alpha = clamp01(fill_color.alpha * impl_->job.subtitle_opacity);
+    const double outline_alpha = clamp01(outline_color.alpha * impl_->job.subtitle_opacity);
+
+    cairo_save(cr);
+    cairo_translate(cr, origin_x, origin_y);
+    pango_cairo_update_layout(cr, layout);
+    pango_cairo_layout_path(cr, layout);
+    if (impl_->job.subtitle_outline > 0) {
+      cairo_set_source_rgba(
+          cr,
+          static_cast<double>(outline_color.red) / 255.0,
+          static_cast<double>(outline_color.green) / 255.0,
+          static_cast<double>(outline_color.blue) / 255.0,
+          outline_alpha);
+      cairo_set_line_width(cr, std::max(1.0, static_cast<double>(impl_->job.subtitle_outline) * 2.0));
+      cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
+      cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
+      cairo_stroke_preserve(cr);
+    }
+    cairo_set_source_rgba(
+        cr,
+        static_cast<double>(fill_color.red) / 255.0,
+        static_cast<double>(fill_color.green) / 255.0,
+        static_cast<double>(fill_color.blue) / 255.0,
+        fill_alpha);
+    cairo_fill(cr);
+    cairo_restore(cr);
+
+    cairo_surface_flush(surface);
+    unsigned char* data = cairo_image_surface_get_data(surface);
+    const int stride = cairo_image_surface_get_stride(surface);
+
+    overlay.enabled = true;
+    overlay.x = anchor_region->x;
+    overlay.y = anchor_region->y;
+    overlay.width = surface_width;
+    overlay.height = surface_height;
+    overlay.stride = surface_width;
+    overlay.opacity = 1.0f;
+    overlay.cue_text = normalized_text;
+    const size_t pixel_count = static_cast<size_t>(surface_width) * static_cast<size_t>(surface_height);
+    overlay.alpha_mask.assign(pixel_count, 0);
+    overlay.luma_mask.assign(pixel_count, 0);
+    overlay.chroma_u_mask.assign(pixel_count, 128);
+    overlay.chroma_v_mask.assign(pixel_count, 128);
+
+    for (int y = 0; y < surface_height; ++y) {
+      const unsigned char* row = data + static_cast<size_t>(y) * static_cast<size_t>(stride);
+      for (int x = 0; x < surface_width; ++x) {
+        const unsigned char* pixel = row + static_cast<size_t>(x) * 4U;
+        const uint8_t blue = pixel[0];
+        const uint8_t green = pixel[1];
+        const uint8_t red = pixel[2];
+        const uint8_t alpha = pixel[3];
+        const size_t index = static_cast<size_t>(y) * static_cast<size_t>(surface_width) + static_cast<size_t>(x);
+        overlay.alpha_mask[index] = alpha;
+        if (alpha == 0) {
+          continue;
+        }
+        const double alpha_scale = static_cast<double>(alpha) / 255.0;
+        const uint8_t unpremul_red =
+            static_cast<uint8_t>(std::clamp(std::lround(static_cast<double>(red) / alpha_scale), 0l, 255l));
+        const uint8_t unpremul_green =
+            static_cast<uint8_t>(std::clamp(std::lround(static_cast<double>(green) / alpha_scale), 0l, 255l));
+        const uint8_t unpremul_blue =
+            static_cast<uint8_t>(std::clamp(std::lround(static_cast<double>(blue) / alpha_scale), 0l, 255l));
+        rgbToYuv(
+            unpremul_red,
+            unpremul_green,
+            unpremul_blue,
+            overlay.luma_mask[index],
+            overlay.chroma_u_mask[index],
+            overlay.chroma_v_mask[index]);
+      }
+    }
+
+    pango_font_description_free(desc);
+    g_object_unref(layout);
+    cairo_destroy(cr);
+    cairo_surface_destroy(surface);
+    return overlay;
+  }
+#endif
+
   auto set_font_size = [&](int font_pixels) {
     FT_Set_Pixel_Sizes(impl_->ft_face, 0, static_cast<FT_UInt>(font_pixels));
     hb_ft_font_changed(impl_->hb_font);

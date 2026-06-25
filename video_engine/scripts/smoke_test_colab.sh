@@ -45,7 +45,8 @@ job = {
     "subtitle": {
         "srt": os.path.join(repo_root, "examples", "sample.srt"),
         "gaussian_blur": True,
-        "font": "Noto Sans",
+        "font": "SVN-Rush Hour",
+        "font_ttf": r"/content/SVN-Rush Hour.ttf",
         "size": 13.0,
         "bold": True,
         "italic": True,

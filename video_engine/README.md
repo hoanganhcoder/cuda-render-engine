@@ -77,7 +77,8 @@ If you vendor FFmpeg locally, place it under `video_engine/ffmpeg-dev/` with `in
 
 Text rendering backends:
 
-- preferred subtitle text-box path: `FreeType + HarfBuzz` (`TextBoxRenderer`)
+- preferred subtitle text-box path on Linux/Colab: `Pango + Cairo + Fontconfig`
+- fallback text-box path: `FreeType + HarfBuzz` (`TextBoxRenderer`)
 - fallback subtitle path: `libass`
 - final fallback: built-in bitmap renderer
 `CMakeLists.txt` prefers that local tree before falling back to `pkg-config`.
@@ -246,7 +247,8 @@ Nested job layout:
 
 Subtitle rendering path:
 
-- preferred subtitle text-box path: `TextBoxRenderer (FreeType + HarfBuzz)` for region-based layout and explicit line breaking
+- preferred subtitle text-box path on Linux/Colab: `Pango + Cairo + Fontconfig` for mature layout/shaping of script/display fonts
+- fallback text-box path: `TextBoxRenderer (FreeType + HarfBuzz)` for region-based layout and explicit line breaking
 - fallback subtitle path: `libass`
 - final fallback path: built-in bitmap renderer
 

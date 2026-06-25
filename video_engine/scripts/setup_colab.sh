@@ -22,10 +22,12 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   yasm \
   nasm \
   libass-dev \
+  libcairo2-dev \
   libfontconfig1-dev \
   libfreetype6-dev \
   libharfbuzz-dev \
   libnuma-dev \
+  libpango1.0-dev \
   fonts-dejavu-core \
   fonts-noto-core \
   fonts-noto-cjk \
