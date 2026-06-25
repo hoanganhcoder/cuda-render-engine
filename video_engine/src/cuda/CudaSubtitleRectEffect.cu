@@ -330,6 +330,40 @@ __global__ void gaussianVerticalChromaKernel(
   row[1] = denormalizeByte(current_v);
 }
 
+__device__ float sampleGaussianLuma(
+    const uint8_t* source_y,
+    int pitch_y,
+    int width,
+    int height,
+    int x,
+    int y,
+    const DeviceRegion& region,
+    float video_scale,
+    bool flip_horizontal) {
+  (void)region;
+  const int sample_x = mapOutputToSourceCoord(x, width, video_scale, flip_horizontal, true);
+  const int sample_y = mapOutputToSourceCoord(y, height, video_scale, false, false);
+  return normalizeByte(loadLuma(source_y, pitch_y, width, height, sample_x, sample_y));
+}
+
+__device__ uchar2 sampleGaussianChroma(
+    const uint8_t* source_uv,
+    int pitch_uv,
+    int width,
+    int height,
+    int x,
+    int y,
+    const DeviceRegion& region,
+    float video_scale,
+    bool flip_horizontal) {
+  (void)region;
+  const int chroma_width = width / 2;
+  const int chroma_height = height / 2;
+  const int sample_x = mapOutputToSourceCoord(x, width, video_scale, flip_horizontal, true) / 2;
+  const int sample_y = mapOutputToSourceCoord(y, height, video_scale, false, false) / 2;
+  return loadChroma(source_uv, pitch_uv, chroma_width, chroma_height, sample_x, sample_y);
+}
+
 __global__ void subtitleRectLumaKernel(
     const uint8_t* source_y,
     const uint8_t* previous_y,
