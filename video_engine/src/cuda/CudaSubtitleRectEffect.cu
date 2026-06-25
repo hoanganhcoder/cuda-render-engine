@@ -36,9 +36,9 @@ inline void throwOnCudaError(cudaError_t result, const char* message) {
 
 inline int computeBlurRadiusHost(const DeviceRegion& region) {
   const float region_scale = std::max(static_cast<float>(region.h), static_cast<float>(region.w) * 0.15f);
-  const float base_radius = region_scale * (0.03f + region.horizontal_blur * 0.045f);
-  const float feather_boost = region.feather * 0.015f;
-  return std::max(3, std::min(static_cast<int>(base_radius + feather_boost), 8));
+  const float base_radius = region_scale * (0.065f + region.horizontal_blur * 0.14f);
+  const float feather_boost = region.feather * 0.04f;
+  return std::max(6, std::min(static_cast<int>(base_radius + feather_boost), 24));
 }
 
 __device__ float clamp01(float value) {
@@ -581,13 +581,13 @@ void CudaSubtitleRectEffect::apply(
     for (int i = 0; i < region_count; ++i) {
       const DeviceRegion& region = device_regions[static_cast<size_t>(i)];
       const int radius_x = computeBlurRadiusHost(region);
-      const int radius_y = max(1, static_cast<int>(static_cast<float>(radius_x) * fmaxf(region.vertical_stretch, 0.75f) * 0.12f));
+      const int radius_y = max(2, static_cast<int>(static_cast<float>(radius_x) * fmaxf(region.vertical_stretch, 0.85f) * 0.32f));
       max_radius_x = max(max_radius_x, radius_x);
       max_radius_y = max(max_radius_y, radius_y);
-      max_sigma_x = fmaxf(max_sigma_x, fmaxf(1.8f, static_cast<float>(radius_x) * 1.1f));
-      max_sigma_y = fmaxf(max_sigma_y, fmaxf(0.9f, static_cast<float>(radius_y) * 0.75f));
+      max_sigma_x = fmaxf(max_sigma_x, fmaxf(2.8f, static_cast<float>(radius_x) * 0.72f));
+      max_sigma_y = fmaxf(max_sigma_y, fmaxf(1.6f, static_cast<float>(radius_y) * 0.90f));
       const int expand_x = max(2, static_cast<int>(region.feather) + radius_x * 2);
-      const int expand_y = max(2, static_cast<int>(region.feather * 0.5f) + max(1, radius_y));
+      const int expand_y = max(2, static_cast<int>(region.feather * 0.75f) + max(2, radius_y * 2));
       roi_x0 = min(roi_x0, max(0, region.x - expand_x));
       roi_y0 = min(roi_y0, max(0, region.y - expand_y));
       roi_x1 = max(roi_x1, min(width, region.x + region.w + expand_x));

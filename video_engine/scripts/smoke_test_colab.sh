@@ -74,9 +74,9 @@ job = {
                 "w": 640,
                 "h": 95,
                 "strength": 1.0,
-                "feather": 10,
-                "horizontal_blur": 0.9,
-                "vertical_stretch": 1.15,
+                "feather": 18,
+                "horizontal_blur": 1.0,
+                "vertical_stretch": 1.35,
                 "temporal_blend": 0.0,
             }
         ],
