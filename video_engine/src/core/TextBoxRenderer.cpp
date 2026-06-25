@@ -20,6 +20,9 @@
 #if defined(VIDEO_ENGINE_HAS_PANGO)
 #include <cairo.h>
 #include <pango/pangocairo.h>
+#if defined(PANGO_VERSION_CHECK)
+#include <pango/pangofc-fontmap.h>
+#endif
 #endif
 #if defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
 #include <ft2build.h>
@@ -569,7 +572,15 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     cairo_paint(cr);
     cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
 
-    PangoLayout* layout = pango_cairo_create_layout(cr);
+    PangoFontMap* font_map = pango_cairo_font_map_new_for_font_type(CAIRO_FONT_TYPE_FT);
+    PangoContext* context = pango_font_map_create_context(font_map);
+#if defined(PANGO_VERSION_CHECK)
+    if (PANGO_IS_FC_FONT_MAP(font_map)) {
+      pango_fc_font_map_config_changed(PANGO_FC_FONT_MAP(font_map));
+    }
+#endif
+    pango_cairo_update_context(cr, context);
+    PangoLayout* layout = pango_layout_new(context);
     PangoFontDescription* desc = pango_font_description_new();
     pango_font_description_set_family(desc, impl_->resolved_font_family.c_str());
     const bool request_bold = impl_->exact_font_face ? impl_->exact_font_face_bold : impl_->job.subtitle_bold;
@@ -692,6 +703,8 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
     pango_font_description_free(desc);
     g_object_unref(layout);
+    g_object_unref(context);
+    g_object_unref(font_map);
     cairo_destroy(cr);
     cairo_surface_destroy(surface);
     return overlay;
