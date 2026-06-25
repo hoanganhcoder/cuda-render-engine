@@ -39,6 +39,10 @@ python -m pip install --upgrade pip
 python -m pip install pybind11 cmake ninja
 PYBIND11_DIR="${PYBIND11_DIR:-$(python -c 'import pybind11; print(pybind11.get_cmake_dir())')}"
 
+echo "[3.5/7] Verifying text layout dependencies"
+pkg-config --modversion cairo
+pkg-config --modversion pangocairo
+
 echo "[4/7] Verifying CUDA runtime"
 if ! command -v nvidia-smi >/dev/null 2>&1; then
   echo "nvidia-smi not found; Colab GPU runtime is required." >&2
@@ -85,6 +89,7 @@ make -j"$NPROC_VALUE"
 make install
 
 echo "[6/7] Configuring and building video_engine"
+rm -rf "$BUILD_DIR"
 cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
   -Dpybind11_DIR="$PYBIND11_DIR"
