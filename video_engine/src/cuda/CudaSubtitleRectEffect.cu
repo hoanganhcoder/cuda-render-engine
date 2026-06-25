@@ -99,10 +99,10 @@ __device__ int mapOutputToSourceCoord(int coord, int size, float video_scale, bo
 }
 
 __device__ int computeBlurRadius(const DeviceRegion& region) {
-  const float region_scale = fmaxf(static_cast<float>(region.h), static_cast<float>(region.w) * 0.18f);
-  const float base_radius = region_scale * (0.045f + region.horizontal_blur * 0.08f);
-  const float feather_boost = region.feather * 0.03f;
-  return clampInt(static_cast<int>(base_radius + feather_boost), 4, 12);
+  const float region_scale = fmaxf(static_cast<float>(region.h), static_cast<float>(region.w) * 0.15f);
+  const float base_radius = region_scale * (0.03f + region.horizontal_blur * 0.045f);
+  const float feather_boost = region.feather * 0.015f;
+  return clampInt(static_cast<int>(base_radius + feather_boost), 3, 8);
 }
 
 template <size_t N>
@@ -166,36 +166,13 @@ __device__ float sampleGaussianLuma(
     float video_scale,
     bool flip_horizontal) {
   const int radius = computeBlurRadius(region);
-  const int far_x = max(4, radius);
-  const int mid_x = max(2, (radius * 2) / 3);
-  const int near_x = max(1, radius / 3);
-  const int far_y = max(2, static_cast<int>(static_cast<float>(far_x) * fmaxf(region.vertical_stretch, 0.9f) * 0.35f));
-  const int mid_y = max(1, static_cast<int>(static_cast<float>(mid_x) * fmaxf(region.vertical_stretch, 0.9f) * 0.25f));
+  const int near_x = max(1, radius / 2);
+  const int far_x = max(3, radius);
+  const int vertical_y = max(1, static_cast<int>(static_cast<float>(far_x) * fmaxf(region.vertical_stretch, 0.9f) * 0.18f));
 
-  const int offsets_x[] = {
-      0,
-      -near_x, near_x,
-      -mid_x, mid_x,
-      -far_x, far_x,
-      0, 0,
-      -mid_x, mid_x,
-      -far_x, far_x};
-  const int offsets_y[] = {
-      0,
-      0, 0,
-      0, 0,
-      0, 0,
-      -mid_y, mid_y,
-      -far_y, -far_y,
-      far_y, far_y};
-  const float weights[] = {
-      0.16f,
-      0.12f, 0.12f,
-      0.10f, 0.10f,
-      0.07f, 0.07f,
-      0.08f, 0.08f,
-      0.04f, 0.04f,
-      0.01f, 0.01f};
+  const int offsets_x[] = {0, -near_x, near_x, -far_x, far_x, 0, 0};
+  const int offsets_y[] = {0, 0, 0, 0, 0, -vertical_y, vertical_y};
+  const float weights[] = {0.24f, 0.18f, 0.18f, 0.12f, 0.12f, 0.08f, 0.08f};
   return sampleSparseLumaBlur(
       source_y,
       pitch_y,
@@ -224,7 +201,7 @@ __device__ uchar2 sampleGaussianChroma(
   const int chroma_height = height / 2;
   const int center_x = mapOutputToSourceCoord(x, width, video_scale, flip_horizontal, true) / 2;
   const int center_y = mapOutputToSourceCoord(y, height, video_scale, false, false) / 2;
-  const int radius = clampInt((computeBlurRadius(region) + 2) / 5, 1, 3);
+  const int radius = clampInt((computeBlurRadius(region) + 2) / 6, 1, 2);
   float accum_u = 0.0f;
   float accum_v = 0.0f;
   float total_weight = 0.0f;
@@ -233,7 +210,7 @@ __device__ uchar2 sampleGaussianChroma(
       {-radius, 0}, {radius, 0},
       {0, -1}, {0, 1}
   };
-  const float weights[] = {0.50f, 0.16f, 0.16f, 0.09f, 0.09f};
+  const float weights[] = {0.60f, 0.14f, 0.14f, 0.06f, 0.06f};
   for (int index = 0; index < 5; ++index) {
     const uchar2 sample =
         loadChroma(source_uv, pitch_uv, chroma_width, chroma_height, center_x + offsets[index][0], center_y + offsets[index][1]);
