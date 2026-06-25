@@ -1370,3 +1370,707 @@ events:
         - "C:\\Program Files (x86)\\Windows Kits\\10\\\\include\\10.0.26100.0\\\\winrt"
         - "C:\\Program Files (x86)\\Windows Kits\\10\\\\include\\10.0.26100.0\\\\cppwinrt"
 ...
+
+---
+events:
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineSystem.cmake:212 (message)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      The system is: Windows - 10.0.26200 - AMD64
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:468 (find_file)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:506 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCXXCompilerId.cpp.in"
+    candidate_directories:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/"
+    found: "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCXXCompilerId.cpp.in"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Users\\hoanganh\\.codex\\tmp\\arg0\\codex-arg0zRE91k"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\bin"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\libnvvp"
+        - "C:\\Program Files\\ImageMagick-7.1.2-Q16-HDRI"
+        - "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath"
+        - "C:\\WINDOWS\\system32"
+        - "C:\\WINDOWS"
+        - "C:\\WINDOWS\\System32\\Wbem"
+        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\WINDOWS\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\ProgramData\\ComposerSetup\\bin"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files (x86)\\cloudflared\\"
+        - "C:\\Program Files (x86)\\Bitvise SSH Client"
+        - "C:\\Program Files\\Go\\bin"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\NVIDIA Corporation\\Nsight Compute 2022.3.0\\"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA NvDLISR"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\"
+        - "C:\\Users\\hoanganh\\.local\\bin"
+        - "C:\\Users\\hoanganh\\.cargo\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\npm"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk\\platform-tools"
+        - "C:\\xampp\\php"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\Composer\\vendor\\bin"
+        - "C:\\Users\\hoanganh\\go\\bin"
+        - "c:\\Users\\hoanganh\\.vscode\\extensions\\openai.chatgpt-26.616.81150-win32-x64\\bin\\windows-x86_64"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" failed.
+      Compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe 
+      Build flags: 
+      Id flags:  
+      
+      The output was:
+      2
+      Microsoft (R) C/C++ Optimizing Compiler Version 19.50.35726 for x64
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      CMakeCXXCompilerId.cpp
+      Microsoft (R) Incremental Linker Version 14.50.35726.0
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      /out:CMakeCXXCompilerId.exe 
+      CMakeCXXCompilerId.obj 
+      LINK : fatal error LNK1104: cannot open file 'LIBCMT.lib'
+      
+      
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:468 (find_file)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:506 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCXXCompilerId.cpp.in"
+    candidate_directories:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/"
+    found: "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCXXCompilerId.cpp.in"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Users\\hoanganh\\.codex\\tmp\\arg0\\codex-arg0zRE91k"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\bin"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\libnvvp"
+        - "C:\\Program Files\\ImageMagick-7.1.2-Q16-HDRI"
+        - "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath"
+        - "C:\\WINDOWS\\system32"
+        - "C:\\WINDOWS"
+        - "C:\\WINDOWS\\System32\\Wbem"
+        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\WINDOWS\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\ProgramData\\ComposerSetup\\bin"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files (x86)\\cloudflared\\"
+        - "C:\\Program Files (x86)\\Bitvise SSH Client"
+        - "C:\\Program Files\\Go\\bin"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\NVIDIA Corporation\\Nsight Compute 2022.3.0\\"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA NvDLISR"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\"
+        - "C:\\Users\\hoanganh\\.local\\bin"
+        - "C:\\Users\\hoanganh\\.cargo\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\npm"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk\\platform-tools"
+        - "C:\\xampp\\php"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\Composer\\vendor\\bin"
+        - "C:\\Users\\hoanganh\\go\\bin"
+        - "c:\\Users\\hoanganh\\.vscode\\extensions\\openai.chatgpt-26.616.81150-win32-x64\\bin\\windows-x86_64"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:64 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Compiling the CXX compiler identification source file "CMakeCXXCompilerId.cpp" succeeded.
+      Compiler: C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/cl.exe 
+      Build flags: 
+      Id flags: -c 
+      
+      The output was:
+      0
+      Microsoft (R) C/C++ Optimizing Compiler Version 19.50.35726 for x64
+      Copyright (C) Microsoft Corporation.  All rights reserved.
+      
+      CMakeCXXCompilerId.cpp
+      
+      
+      Compilation of the CXX compiler identification source "CMakeCXXCompilerId.cpp" produced "CMakeCXXCompilerId.obj"
+      
+      The CXX compiler identification is MSVC, found in:
+        F:/video-render-engine/video_engine/build_ninja/CMakeFiles/4.3.1/CompilerIdCXX/CMakeCXXCompilerId.obj
+      
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:1347 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:250 (CMAKE_DETERMINE_MSVC_SHOWINCLUDES_PREFIX)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCXXCompiler.cmake:125 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Detecting CXX compiler /showIncludes prefix:
+        main.c
+        Note: including file: F:\\video-render-engine\\video_engine\\build_ninja\\CMakeFiles\\ShowIncludes\\foo.h
+        
+      Found prefix "Note: including file: "
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeFindBinUtils.cmake:37 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeFindBinUtils.cmake:65 (__resolve_tool_path)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeFindBinUtils.cmake:103 (__resolve_linker_path)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCXXCompiler.cmake:206 (include)"
+      - "CMakeLists.txt:3 (project)"
+    mode: "program"
+    variable: "_CMAKE_TOOL_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "link"
+    candidate_directories:
+      - "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/"
+      - "C:/Users/hoanganh/.codex/tmp/arg0/codex-arg0zRE91k/"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/bin/"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/libnvvp/"
+      - "C:/Program Files/ImageMagick-7.1.2-Q16-HDRI/"
+      - "C:/Program Files (x86)/Common Files/Oracle/Java/javapath/"
+      - "C:/Windows/System32/"
+      - "C:/Windows/"
+      - "C:/Windows/System32/wbem/"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/"
+      - "C:/Windows/System32/OpenSSH/"
+      - "C:/Program Files/Git/cmd/"
+      - "C:/Program Files/nodejs/"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/ProgramData/ComposerSetup/bin/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files (x86)/cloudflared/"
+      - "C:/Program Files (x86)/Bitvise SSH Client/"
+      - "C:/Program Files/Go/bin/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR/"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/"
+      - "C:/Program Files/NVIDIA Corporation/Nsight Compute 2022.3.0/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA NvDLISR/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python311/Scripts/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python311/"
+      - "C:/Users/hoanganh/.local/bin/"
+      - "C:/Users/hoanganh/.cargo/bin/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python310/Scripts/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python310/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python312/Scripts/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python312/"
+      - "C:/Users/hoanganh/AppData/Local/Microsoft/WindowsApps/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Microsoft VS Code/bin/"
+      - "C:/Users/hoanganh/AppData/Roaming/npm/"
+      - "C:/Users/hoanganh/AppData/Local/Android/Sdk/"
+      - "C:/Users/hoanganh/AppData/Local/Android/Sdk/platform-tools/"
+      - "C:/xampp/php/"
+      - "C:/Users/hoanganh/AppData/Roaming/Composer/vendor/bin/"
+      - "C:/Users/hoanganh/go/bin/"
+      - "C:/Users/hoanganh/.vscode/extensions/openai.chatgpt-26.616.81150-win32-x64/bin/windows-x86_64/"
+    searched_directories:
+      - "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/link.com"
+    found: "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/link.exe"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Users\\hoanganh\\.codex\\tmp\\arg0\\codex-arg0zRE91k"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\bin"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\libnvvp"
+        - "C:\\Program Files\\ImageMagick-7.1.2-Q16-HDRI"
+        - "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath"
+        - "C:\\WINDOWS\\system32"
+        - "C:\\WINDOWS"
+        - "C:\\WINDOWS\\System32\\Wbem"
+        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\WINDOWS\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\ProgramData\\ComposerSetup\\bin"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files (x86)\\cloudflared\\"
+        - "C:\\Program Files (x86)\\Bitvise SSH Client"
+        - "C:\\Program Files\\Go\\bin"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\NVIDIA Corporation\\Nsight Compute 2022.3.0\\"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA NvDLISR"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\"
+        - "C:\\Users\\hoanganh\\.local\\bin"
+        - "C:\\Users\\hoanganh\\.cargo\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\npm"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk\\platform-tools"
+        - "C:\\xampp\\php"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\Composer\\vendor\\bin"
+        - "C:\\Users\\hoanganh\\go\\bin"
+        - "c:\\Users\\hoanganh\\.vscode\\extensions\\openai.chatgpt-26.616.81150-win32-x64\\bin\\windows-x86_64"
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeFindBinUtils.cmake:37 (find_program)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeFindBinUtils.cmake:65 (__resolve_tool_path)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeFindBinUtils.cmake:104 (__resolve_linker_path)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCXXCompiler.cmake:206 (include)"
+      - "CMakeLists.txt:3 (project)"
+    mode: "program"
+    variable: "_CMAKE_TOOL_WITH_PATH"
+    description: "Path to a program."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: false
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: false
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "lld-link"
+    candidate_directories:
+      - "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/"
+      - "C:/Users/hoanganh/.codex/tmp/arg0/codex-arg0zRE91k/"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/bin/"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/libnvvp/"
+      - "C:/Program Files/ImageMagick-7.1.2-Q16-HDRI/"
+      - "C:/Program Files (x86)/Common Files/Oracle/Java/javapath/"
+      - "C:/Windows/System32/"
+      - "C:/Windows/"
+      - "C:/Windows/System32/wbem/"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/"
+      - "C:/Windows/System32/OpenSSH/"
+      - "C:/Program Files/Git/cmd/"
+      - "C:/Program Files/nodejs/"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/"
+      - "C:/ProgramData/ComposerSetup/bin/"
+      - "C:/Program Files/CMake/bin/"
+      - "C:/Program Files (x86)/cloudflared/"
+      - "C:/Program Files (x86)/Bitvise SSH Client/"
+      - "C:/Program Files/Go/bin/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR/"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/"
+      - "C:/Program Files/NVIDIA Corporation/Nsight Compute 2022.3.0/"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA NvDLISR/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python311/Scripts/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python311/"
+      - "C:/Users/hoanganh/.local/bin/"
+      - "C:/Users/hoanganh/.cargo/bin/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python310/Scripts/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python310/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python312/Scripts/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python312/"
+      - "C:/Users/hoanganh/AppData/Local/Microsoft/WindowsApps/"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Microsoft VS Code/bin/"
+      - "C:/Users/hoanganh/AppData/Roaming/npm/"
+      - "C:/Users/hoanganh/AppData/Local/Android/Sdk/"
+      - "C:/Users/hoanganh/AppData/Local/Android/Sdk/platform-tools/"
+      - "C:/xampp/php/"
+      - "C:/Users/hoanganh/AppData/Roaming/Composer/vendor/bin/"
+      - "C:/Users/hoanganh/go/bin/"
+      - "C:/Users/hoanganh/.vscode/extensions/openai.chatgpt-26.616.81150-win32-x64/bin/windows-x86_64/"
+    searched_directories:
+      - "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/lld-link.com"
+      - "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/lld-link.exe"
+      - "C:/Program Files/Microsoft Visual Studio/18/Community/VC/Tools/MSVC/14.50.35717/bin/Hostx64/x64/lld-link"
+      - "C:/Users/hoanganh/.codex/tmp/arg0/codex-arg0zRE91k/lld-link.com"
+      - "C:/Users/hoanganh/.codex/tmp/arg0/codex-arg0zRE91k/lld-link.exe"
+      - "C:/Users/hoanganh/.codex/tmp/arg0/codex-arg0zRE91k/lld-link"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/bin/lld-link.com"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/bin/lld-link.exe"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/bin/lld-link"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/libnvvp/lld-link.com"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/libnvvp/lld-link.exe"
+      - "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/libnvvp/lld-link"
+      - "C:/Program Files/ImageMagick-7.1.2-Q16-HDRI/lld-link.com"
+      - "C:/Program Files/ImageMagick-7.1.2-Q16-HDRI/lld-link.exe"
+      - "C:/Program Files/ImageMagick-7.1.2-Q16-HDRI/lld-link"
+      - "C:/Program Files (x86)/Common Files/Oracle/Java/javapath/lld-link.com"
+      - "C:/Program Files (x86)/Common Files/Oracle/Java/javapath/lld-link.exe"
+      - "C:/Program Files (x86)/Common Files/Oracle/Java/javapath/lld-link"
+      - "C:/Windows/System32/lld-link.com"
+      - "C:/Windows/System32/lld-link.exe"
+      - "C:/Windows/System32/lld-link"
+      - "C:/Windows/lld-link.com"
+      - "C:/Windows/lld-link.exe"
+      - "C:/Windows/lld-link"
+      - "C:/Windows/System32/wbem/lld-link.com"
+      - "C:/Windows/System32/wbem/lld-link.exe"
+      - "C:/Windows/System32/wbem/lld-link"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link.com"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link.exe"
+      - "C:/Windows/System32/WindowsPowerShell/v1.0/lld-link"
+      - "C:/Windows/System32/OpenSSH/lld-link.com"
+      - "C:/Windows/System32/OpenSSH/lld-link.exe"
+      - "C:/Windows/System32/OpenSSH/lld-link"
+      - "C:/Program Files/Git/cmd/lld-link.com"
+      - "C:/Program Files/Git/cmd/lld-link.exe"
+      - "C:/Program Files/Git/cmd/lld-link"
+      - "C:/Program Files/nodejs/lld-link.com"
+      - "C:/Program Files/nodejs/lld-link.exe"
+      - "C:/Program Files/nodejs/lld-link"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.com"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link.exe"
+      - "C:/Program Files (x86)/Windows Kits/10/Windows Performance Toolkit/lld-link"
+      - "C:/ProgramData/ComposerSetup/bin/lld-link.com"
+      - "C:/ProgramData/ComposerSetup/bin/lld-link.exe"
+      - "C:/ProgramData/ComposerSetup/bin/lld-link"
+      - "C:/Program Files/CMake/bin/lld-link.com"
+      - "C:/Program Files/CMake/bin/lld-link.exe"
+      - "C:/Program Files/CMake/bin/lld-link"
+      - "C:/Program Files (x86)/cloudflared/lld-link.com"
+      - "C:/Program Files (x86)/cloudflared/lld-link.exe"
+      - "C:/Program Files (x86)/cloudflared/lld-link"
+      - "C:/Program Files (x86)/Bitvise SSH Client/lld-link.com"
+      - "C:/Program Files (x86)/Bitvise SSH Client/lld-link.exe"
+      - "C:/Program Files (x86)/Bitvise SSH Client/lld-link"
+      - "C:/Program Files/Go/bin/lld-link.com"
+      - "C:/Program Files/Go/bin/lld-link.exe"
+      - "C:/Program Files/Go/bin/lld-link"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR/lld-link.com"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR/lld-link.exe"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA App/NvDLISR/lld-link"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link.com"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link.exe"
+      - "C:/Program Files (x86)/NVIDIA Corporation/PhysX/Common/lld-link"
+      - "C:/Program Files/NVIDIA Corporation/Nsight Compute 2022.3.0/lld-link.com"
+      - "C:/Program Files/NVIDIA Corporation/Nsight Compute 2022.3.0/lld-link.exe"
+      - "C:/Program Files/NVIDIA Corporation/Nsight Compute 2022.3.0/lld-link"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA NvDLISR/lld-link.com"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA NvDLISR/lld-link.exe"
+      - "C:/Program Files/NVIDIA Corporation/NVIDIA NvDLISR/lld-link"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python311/Scripts/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python311/Scripts/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python311/Scripts/lld-link"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python311/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python311/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python311/lld-link"
+      - "C:/Users/hoanganh/.local/bin/lld-link.com"
+      - "C:/Users/hoanganh/.local/bin/lld-link.exe"
+      - "C:/Users/hoanganh/.local/bin/lld-link"
+      - "C:/Users/hoanganh/.cargo/bin/lld-link.com"
+      - "C:/Users/hoanganh/.cargo/bin/lld-link.exe"
+      - "C:/Users/hoanganh/.cargo/bin/lld-link"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python310/Scripts/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python310/Scripts/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python310/Scripts/lld-link"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python310/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python310/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python310/lld-link"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python312/Scripts/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python312/Scripts/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python312/Scripts/lld-link"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python312/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python312/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Python/Python312/lld-link"
+      - "C:/Users/hoanganh/AppData/Local/Microsoft/WindowsApps/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Local/Microsoft/WindowsApps/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Local/Microsoft/WindowsApps/lld-link"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Microsoft VS Code/bin/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Microsoft VS Code/bin/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Local/Programs/Microsoft VS Code/bin/lld-link"
+      - "C:/Users/hoanganh/AppData/Roaming/npm/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Roaming/npm/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Roaming/npm/lld-link"
+      - "C:/Users/hoanganh/AppData/Local/Android/Sdk/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Local/Android/Sdk/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Local/Android/Sdk/lld-link"
+      - "C:/Users/hoanganh/AppData/Local/Android/Sdk/platform-tools/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Local/Android/Sdk/platform-tools/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Local/Android/Sdk/platform-tools/lld-link"
+      - "C:/xampp/php/lld-link.com"
+      - "C:/xampp/php/lld-link.exe"
+      - "C:/xampp/php/lld-link"
+      - "C:/Users/hoanganh/AppData/Roaming/Composer/vendor/bin/lld-link.com"
+      - "C:/Users/hoanganh/AppData/Roaming/Composer/vendor/bin/lld-link.exe"
+      - "C:/Users/hoanganh/AppData/Roaming/Composer/vendor/bin/lld-link"
+      - "C:/Users/hoanganh/go/bin/lld-link.com"
+      - "C:/Users/hoanganh/go/bin/lld-link.exe"
+      - "C:/Users/hoanganh/go/bin/lld-link"
+      - "C:/Users/hoanganh/.vscode/extensions/openai.chatgpt-26.616.81150-win32-x64/bin/windows-x86_64/lld-link.com"
+      - "C:/Users/hoanganh/.vscode/extensions/openai.chatgpt-26.616.81150-win32-x64/bin/windows-x86_64/lld-link.exe"
+      - "C:/Users/hoanganh/.vscode/extensions/openai.chatgpt-26.616.81150-win32-x64/bin/windows-x86_64/lld-link"
+    found: false
+    search_context:
+      ENV{PATH}:
+        - "C:\\Users\\hoanganh\\.codex\\tmp\\arg0\\codex-arg0zRE91k"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\bin"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\libnvvp"
+        - "C:\\Program Files\\ImageMagick-7.1.2-Q16-HDRI"
+        - "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath"
+        - "C:\\WINDOWS\\system32"
+        - "C:\\WINDOWS"
+        - "C:\\WINDOWS\\System32\\Wbem"
+        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\WINDOWS\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\ProgramData\\ComposerSetup\\bin"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files (x86)\\cloudflared\\"
+        - "C:\\Program Files (x86)\\Bitvise SSH Client"
+        - "C:\\Program Files\\Go\\bin"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\NVIDIA Corporation\\Nsight Compute 2022.3.0\\"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA NvDLISR"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\"
+        - "C:\\Users\\hoanganh\\.local\\bin"
+        - "C:\\Users\\hoanganh\\.cargo\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\npm"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk\\platform-tools"
+        - "C:\\xampp\\php"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\Composer\\vendor\\bin"
+        - "C:\\Users\\hoanganh\\go\\bin"
+        - "c:\\Users\\hoanganh\\.vscode\\extensions\\openai.chatgpt-26.616.81150-win32-x64\\bin\\windows-x86_64"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:1296 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCUDACompiler.cmake:99 (CMAKE_DETERMINE_COMPILER_ID_VENDOR)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Checking whether the CUDA compiler is NVIDIA using "" matched "nvcc: [^
+      ]+ Cuda compiler driver":
+      nvcc: NVIDIA (R) Cuda compiler driver
+      Copyright (c) 2005-2022 NVIDIA Corporation
+      Built on Wed_Sep_21_10:41:10_Pacific_Daylight_Time_2022
+      Cuda compilation tools, release 11.8, V11.8.89
+      Build cuda_11.8.r11.8/compiler.31833905_0
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:468 (find_file)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:506 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:53 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCUDACompiler.cmake:163 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCUDACompilerId.cu.in"
+    candidate_directories:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/"
+    found: "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCUDACompilerId.cu.in"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Users\\hoanganh\\.codex\\tmp\\arg0\\codex-arg0zRE91k"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\bin"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\libnvvp"
+        - "C:\\Program Files\\ImageMagick-7.1.2-Q16-HDRI"
+        - "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath"
+        - "C:\\WINDOWS\\system32"
+        - "C:\\WINDOWS"
+        - "C:\\WINDOWS\\System32\\Wbem"
+        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\WINDOWS\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\ProgramData\\ComposerSetup\\bin"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files (x86)\\cloudflared\\"
+        - "C:\\Program Files (x86)\\Bitvise SSH Client"
+        - "C:\\Program Files\\Go\\bin"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\NVIDIA Corporation\\Nsight Compute 2022.3.0\\"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA NvDLISR"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\"
+        - "C:\\Users\\hoanganh\\.local\\bin"
+        - "C:\\Users\\hoanganh\\.cargo\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\npm"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk\\platform-tools"
+        - "C:\\xampp\\php"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\Composer\\vendor\\bin"
+        - "C:\\Users\\hoanganh\\go\\bin"
+        - "c:\\Users\\hoanganh\\.vscode\\extensions\\openai.chatgpt-26.616.81150-win32-x64\\bin\\windows-x86_64"
+  -
+    kind: "message-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:17 (message)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:53 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCUDACompiler.cmake:163 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    message: |
+      Compiling the CUDA compiler identification source file "CMakeCUDACompilerId.cu" failed.
+      Compiler: C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v11.8/bin/nvcc.exe 
+      Build flags: --allow-unsupported-compiler
+      Id flags: --keep;--keep-dir;tmp -v
+      
+      The output was:
+      1
+      nvcc fatal   : Cannot find compiler 'cl.exe' in PATH
+      
+      
+  -
+    kind: "find-v1"
+    backtrace:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:468 (find_file)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:506 (CMAKE_DETERMINE_COMPILER_ID_WRITE)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:8 (CMAKE_DETERMINE_COMPILER_ID_BUILD)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCompilerId.cmake:53 (__determine_compiler_id_test)"
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineCUDACompiler.cmake:163 (CMAKE_DETERMINE_COMPILER_ID)"
+      - "CMakeLists.txt:3 (project)"
+    mode: "file"
+    variable: "src_in"
+    description: "Path to a file."
+    settings:
+      SearchFramework: "NEVER"
+      SearchAppBundle: "NEVER"
+      CMAKE_FIND_USE_CMAKE_PATH: true
+      CMAKE_FIND_USE_CMAKE_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_SYSTEM_ENVIRONMENT_PATH: true
+      CMAKE_FIND_USE_CMAKE_SYSTEM_PATH: true
+      CMAKE_FIND_USE_INSTALL_PREFIX: true
+    names:
+      - "CMakeCUDACompilerId.cu.in"
+    candidate_directories:
+      - "C:/Program Files/CMake/share/cmake-4.3/Modules/"
+    found: "C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCUDACompilerId.cu.in"
+    search_context:
+      ENV{PATH}:
+        - "C:\\Users\\hoanganh\\.codex\\tmp\\arg0\\codex-arg0zRE91k"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\bin"
+        - "C:\\Program Files\\NVIDIA GPU Computing Toolkit\\CUDA\\v11.8\\libnvvp"
+        - "C:\\Program Files\\ImageMagick-7.1.2-Q16-HDRI"
+        - "C:\\Program Files (x86)\\Common Files\\Oracle\\Java\\javapath"
+        - "C:\\WINDOWS\\system32"
+        - "C:\\WINDOWS"
+        - "C:\\WINDOWS\\System32\\Wbem"
+        - "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\"
+        - "C:\\WINDOWS\\System32\\OpenSSH\\"
+        - "C:\\Program Files\\Git\\cmd"
+        - "C:\\Program Files\\nodejs\\"
+        - "C:\\Program Files (x86)\\Windows Kits\\10\\Windows Performance Toolkit\\"
+        - "C:\\ProgramData\\ComposerSetup\\bin"
+        - "C:\\Program Files\\CMake\\bin"
+        - "C:\\Program Files (x86)\\cloudflared\\"
+        - "C:\\Program Files (x86)\\Bitvise SSH Client"
+        - "C:\\Program Files\\Go\\bin"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA App\\NvDLISR"
+        - "C:\\Program Files (x86)\\NVIDIA Corporation\\PhysX\\Common"
+        - "C:\\Program Files\\NVIDIA Corporation\\Nsight Compute 2022.3.0\\"
+        - "C:\\Program Files\\NVIDIA Corporation\\NVIDIA NvDLISR"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python311\\"
+        - "C:\\Users\\hoanganh\\.local\\bin"
+        - "C:\\Users\\hoanganh\\.cargo\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python310\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\Scripts\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Python\\Python312\\"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Microsoft\\WindowsApps"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Programs\\Microsoft VS Code\\bin"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\npm"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk"
+        - "C:\\Users\\hoanganh\\AppData\\Local\\Android\\Sdk\\platform-tools"
+        - "C:\\xampp\\php"
+        - "C:\\Users\\hoanganh\\AppData\\Roaming\\Composer\\vendor\\bin"
+        - "C:\\Users\\hoanganh\\go\\bin"
+        - "c:\\Users\\hoanganh\\.vscode\\extensions\\openai.chatgpt-26.616.81150-win32-x64\\bin\\windows-x86_64"
+...

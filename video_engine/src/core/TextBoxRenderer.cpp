@@ -197,6 +197,17 @@ std::string uppercaseUnicode(const std::string& text) {
   return output;
 }
 
+std::vector<std::string> utf8CodePointChunks(const std::string& text) {
+  std::vector<std::string> chunks;
+  chunks.reserve(text.size());
+  for (size_t index = 0; index < text.size();) {
+    const size_t start = index;
+    decodeUtf8CodePoint(text, index);
+    chunks.push_back(text.substr(start, index - start));
+  }
+  return chunks;
+}
+
 RgbaColor parseHexColor(const std::string& hex) {
   auto parse_component = [&](size_t offset) {
     return static_cast<unsigned int>(std::stoul(hex.substr(offset, 2), nullptr, 16));
@@ -261,6 +272,7 @@ struct LineLayout {
   std::string text;
   std::vector<ShapedGlyph> glyphs;
   float width = 0.0f;
+  float advance_width = 0.0f;
 };
 
 struct OverlayCacheKey {
@@ -382,6 +394,23 @@ TextBoxRenderer::~TextBoxRenderer() {
 }
 
 void TextBoxRenderer::initialize(const RenderJob& job, int video_width, int video_height) {
+#if defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
+  impl_->glyph_cache.clear();
+  impl_->line_cache.clear();
+  impl_->overlay_cache.clear();
+  if (impl_->hb_font != nullptr) {
+    hb_font_destroy(impl_->hb_font);
+    impl_->hb_font = nullptr;
+  }
+  if (impl_->ft_face != nullptr) {
+    FT_Done_Face(impl_->ft_face);
+    impl_->ft_face = nullptr;
+  }
+  if (impl_->ft_library != nullptr) {
+    FT_Done_FreeType(impl_->ft_library);
+    impl_->ft_library = nullptr;
+  }
+#endif
   impl_->job = job;
   impl_->video_width = video_width;
   impl_->video_height = video_height;
@@ -460,6 +489,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     int line_height = 0;
     int side_padding = 0;
     int top_padding = 0;
+    float max_line_width = 0.0f;
     std::vector<std::string> lines;
   };
 
@@ -517,9 +547,32 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
         }
         pen_x += glyph.x_advance;
       }
+      layout.advance_width = pen_x;
       layout.width = (min_x <= max_x) ? (max_x - min_x) : pen_x;
       hb_buffer_destroy(buffer);
       return impl_->line_cache.emplace(cache_id, std::move(layout)).first->second;
+    };
+
+    auto split_word_to_fit = [&](const std::string& word) {
+      std::vector<std::string> segments;
+      std::string current_segment;
+      for (const std::string& code_point : utf8CodePointChunks(word)) {
+        const std::string candidate = current_segment + code_point;
+        const LineLayout& candidate_layout = get_line_layout(candidate);
+        if (!current_segment.empty() && candidate_layout.width > static_cast<float>(dynamic_usable_width)) {
+          segments.push_back(current_segment);
+          current_segment = code_point;
+        } else {
+          current_segment = candidate;
+        }
+      }
+      if (!current_segment.empty()) {
+        segments.push_back(current_segment);
+      }
+      if (segments.empty()) {
+        segments.push_back(word);
+      }
+      return segments;
     };
 
     std::vector<std::string> lines;
@@ -535,11 +588,35 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
         std::string word;
         std::string current;
         while (words >> word) {
+          if (current.empty() && get_line_layout(word).width > static_cast<float>(dynamic_usable_width)) {
+            const std::vector<std::string> segments = split_word_to_fit(word);
+            for (size_t segment_index = 0; segment_index < segments.size(); ++segment_index) {
+              const std::string& segment = segments[segment_index];
+              if (segment_index + 1 < segments.size()) {
+                lines.push_back(segment);
+              } else {
+                current = segment;
+              }
+            }
+            continue;
+          }
           const std::string candidate = current.empty() ? word : current + " " + word;
           const LineLayout& candidate_layout = get_line_layout(candidate);
           if (!current.empty() && candidate_layout.width > static_cast<float>(dynamic_usable_width)) {
             lines.push_back(current);
-            current = word;
+            if (get_line_layout(word).width > static_cast<float>(dynamic_usable_width)) {
+              const std::vector<std::string> segments = split_word_to_fit(word);
+              for (size_t segment_index = 0; segment_index < segments.size(); ++segment_index) {
+                const std::string& segment = segments[segment_index];
+                if (segment_index + 1 < segments.size()) {
+                  lines.push_back(segment);
+                } else {
+                  current = segment;
+                }
+              }
+            } else {
+              current = word;
+            }
           } else {
             current = candidate;
           }
@@ -560,6 +637,10 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
         ascender + static_cast<int>(impl_->job.subtitle_outline) * 2 + impl_->job.subtitle_shadow + 4,
         static_cast<int>(impl_->ft_face->size->metrics.height >> 6));
     const int dynamic_usable_height = std::max(1, anchor_region->h - dynamic_top_padding * 2);
+    float max_line_width = 0.0f;
+    for (const std::string& line : lines) {
+      max_line_width = std::max(max_line_width, get_line_layout(line).width);
+    }
     return FittedLayout{
         font_pixels,
         dynamic_usable_width,
@@ -567,6 +648,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
         line_height,
         dynamic_side_padding,
         dynamic_top_padding,
+        max_line_width,
         std::move(lines)};
   };
 
@@ -577,7 +659,8 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     for (int font_pixels = requested_font_pixels; font_pixels >= min_font_pixels; --font_pixels) {
       FittedLayout candidate = shape_lines_for_font(font_pixels);
       const int total_height_candidate = candidate.line_height * static_cast<int>(candidate.lines.size());
-      if (total_height_candidate <= candidate.usable_height) {
+      if (total_height_candidate <= candidate.usable_height &&
+          candidate.max_line_width <= static_cast<float>(candidate.usable_width)) {
         fitted = std::move(candidate);
         break;
       }
@@ -729,15 +812,11 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
   if (min_x >= max_x || min_y >= max_y) {
     return overlay;
   }
-  const int clip_left = anchor_region->x + side_padding;
-  const int clip_top = anchor_region->y + top_padding;
-  const int clip_right = anchor_region->x + anchor_region->w - side_padding;
-  const int clip_bottom = anchor_region->y + anchor_region->h - top_padding;
   if (impl_->job.subtitle_clip) {
-    min_x = std::max(min_x, clip_left);
-    min_y = std::max(min_y, clip_top);
-    max_x = std::min(max_x, clip_right);
-    max_y = std::min(max_y, clip_bottom);
+    min_x = std::max(min_x, anchor_region->x);
+    min_y = std::max(min_y, anchor_region->y);
+    max_x = std::min(max_x, anchor_region->x + anchor_region->w);
+    max_y = std::min(max_y, anchor_region->y + anchor_region->h);
     if (min_x >= max_x || min_y >= max_y) {
       return SubtitleOverlay{};
     }

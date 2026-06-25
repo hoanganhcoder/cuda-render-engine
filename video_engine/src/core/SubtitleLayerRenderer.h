@@ -1,23 +1,20 @@
 #pragma once
 
 #include <memory>
-#include <vector>
 
 #include "core/AssSubtitleRenderer.h"
 #include "core/LayerRenderer.h"
-#include "core/RenderJob.h"
-#include "core/SubtitleOverlay.h"
 #include "core/TextBoxRenderer.h"
 
 namespace video_engine {
 
-class OverlayLayerRenderer : public LayerRenderer {
+class SubtitleLayerRenderer : public LayerRenderer {
 public:
-  OverlayLayerRenderer();
-  ~OverlayLayerRenderer();
+  SubtitleLayerRenderer();
+  ~SubtitleLayerRenderer();
 
-  OverlayLayerRenderer(const OverlayLayerRenderer&) = delete;
-  OverlayLayerRenderer& operator=(const OverlayLayerRenderer&) = delete;
+  SubtitleLayerRenderer(const SubtitleLayerRenderer&) = delete;
+  SubtitleLayerRenderer& operator=(const SubtitleLayerRenderer&) = delete;
 
   void initialize(const RenderJob& job, int video_width, int video_height) override;
   [[nodiscard]] std::vector<SubtitleOverlay> render(double timestamp_seconds) const override;
@@ -26,8 +23,8 @@ public:
 private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
-  TextBoxRenderer text_renderer_;
-  AssSubtitleRenderer ass_text_renderer_;
+  TextBoxRenderer text_box_renderer_;
+  AssSubtitleRenderer ass_subtitle_renderer_;
 };
 
 }  // namespace video_engine

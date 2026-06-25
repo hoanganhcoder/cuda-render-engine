@@ -8,8 +8,8 @@
 #include <libavutil/hwcontext.h>
 
 #include "core/Logger.h"
-#include "core/SubtitleRenderer.h"
 #include "core/timeline/RenderJobAdapter.h"
+#include "cuda/CudaSubtitleRectEffect.h"
 
 namespace video_engine {
 
@@ -163,18 +163,17 @@ bool RenderEngine::render(const RenderJob& input_job) {
     for (Region& region : job.regions) {
       region.clampToBounds(job.width, job.height);
     }
-    (void)sequence_input;
     blur_box_effect_.initialize(sequence_input);
-    text_box_renderer_.initialize(job, job.width, job.height);
-    ass_subtitle_renderer_.initialize(job, job.width, job.height);
+    current_job_ = job;
+    current_video_width_ = job.width;
+    current_video_height_ = job.height;
+    subtitle_layer_renderer_.initialize(job, job.width, job.height);
     overlay_layer_renderer_.initialize(job, job.width, job.height);
     if (!job.subtitle_srt.empty() || !job.subtitle_text.empty()) {
-      if (text_box_renderer_.available()) {
-        Logger::info("Using TextBoxRenderer subtitle renderer.");
-      } else if (ass_subtitle_renderer_.available()) {
-        Logger::info("Using libass subtitle renderer.");
+      if (subtitle_layer_renderer_.available()) {
+        Logger::info("Using subtitle layer renderer.");
       } else {
-        Logger::warn("TextBoxRenderer/libass unavailable, falling back to built-in bitmap subtitle renderer.");
+        Logger::warn("Subtitle layer renderer unavailable.");
       }
     }
 
@@ -197,9 +196,8 @@ bool RenderEngine::render(const RenderJob& input_job) {
         encoder.open(job.output, job.width, job.height, job.fps, decoder.hwDeviceContext(), decoded_frame->hw_frames_ctx);
       }
 
-      const std::vector<Region> active_regions = collectActiveRegions(job, timestamp_seconds);
       const std::vector<Region> active_blur_regions = blur_box_effect_.collectActiveRegions(timestamp_seconds);
-      current_overlay = buildSubtitleOverlay(job, active_regions, timestamp_seconds);
+      current_overlay = buildCompositeOverlay(timestamp_seconds);
       if (current_overlay.enabled) {
         subtitle_mask_buffer_.upload(current_overlay.alpha_mask, cuda_context_.stream());
         subtitle_luma_buffer_.upload(current_overlay.luma_mask, cuda_context_.stream());
@@ -264,40 +262,11 @@ bool RenderEngine::render(const RenderJob& input_job) {
   }
 }
 
-std::vector<Region> RenderEngine::collectActiveRegions(const RenderJob& job, double timestamp) const {
-  std::vector<Region> active_regions;
-  active_regions.reserve(std::min(static_cast<int>(job.regions.size()), CudaSubtitleRectEffect::kMaxRegions));
-  for (const Region& region : job.regions) {
-    if (region.isActive(timestamp) && region.w > 0 && region.h > 0) {
-      active_regions.push_back(region);
-      if (static_cast<int>(active_regions.size()) == CudaSubtitleRectEffect::kMaxRegions) {
-        break;
-      }
-    }
-  }
-  return active_regions;
-}
-
-SubtitleOverlay RenderEngine::buildSubtitleOverlay(
-    const RenderJob& job,
-    const std::vector<Region>& active_regions,
-    double timestamp_seconds) const {
+SubtitleOverlay RenderEngine::buildCompositeOverlay(double timestamp_seconds) const {
   std::vector<SubtitleOverlay> overlays;
-  if (!active_regions.empty()) {
-    if (text_box_renderer_.available()) {
-      overlays.push_back(text_box_renderer_.render(timestamp_seconds, &active_regions.front()));
-    } else if (ass_subtitle_renderer_.available()) {
-      overlays.push_back(ass_subtitle_renderer_.render(timestamp_seconds, &active_regions.front()));
-    } else if (!job.subtitle_text.empty()) {
-      overlays.push_back(SubtitleRenderer::buildOverlay(
-          active_regions.front(),
-          job.subtitle_text,
-          job.width,
-          job.height,
-          job.subtitle_font_scale,
-          job.subtitle_margin,
-          job.subtitle_opacity));
-    }
+  if (subtitle_layer_renderer_.available()) {
+    const std::vector<SubtitleOverlay> subtitle_layers = subtitle_layer_renderer_.render(timestamp_seconds);
+    overlays.insert(overlays.end(), subtitle_layers.begin(), subtitle_layers.end());
   }
 
   if (overlay_layer_renderer_.available()) {
@@ -305,7 +274,7 @@ SubtitleOverlay RenderEngine::buildSubtitleOverlay(
     overlays.insert(overlays.end(), overlay_layers.begin(), overlay_layers.end());
   }
 
-  return combineOverlays(overlays, job.width, job.height);
+  return combineOverlays(overlays, current_video_width_, current_video_height_);
 }
 
 AVFrame* RenderEngine::allocateHardwareFrame(AVBufferRef* hw_frames_context, int width, int height) const {

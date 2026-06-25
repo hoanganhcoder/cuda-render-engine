@@ -2,6 +2,6 @@
 __pycache__/
 ffmpeg-dev
 build/
-
+build_ninja
 env
 venv

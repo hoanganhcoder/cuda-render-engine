@@ -253,7 +253,7 @@ Editor-style model:
 - `subtitle.regions[*]` defines the subtitle text box
 - text layout uses `wrap/clip/auto_fit/padding/alignment`
 - blur is applied independently through the region mask path (`blur box`)
-- watermark text and logos are handled as overlay layers
+- watermark text and logos are handled by `OverlayLayerRenderer`
 
 Recommended "fansub-style" defaults:
 

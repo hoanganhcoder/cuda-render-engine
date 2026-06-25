@@ -311,9 +311,11 @@ void OverlayLayerRenderer::initialize(const RenderJob& job, int video_width, int
   impl_->text_job.subtitle_padding_y = std::max(job.watermark_margin / 4, 4);
   impl_->text_job.subtitle_align_h = "center";
   impl_->text_job.subtitle_align_v = "middle";
+  impl_->text_job.regions.clear();
 
   if (impl_->text_enabled) {
     text_renderer_.initialize(impl_->text_job, video_width, video_height);
+    ass_text_renderer_.initialize(impl_->text_job, video_width, video_height);
   }
 
   if (impl_->logo_enabled) {
@@ -369,6 +371,8 @@ std::vector<SubtitleOverlay> OverlayLayerRenderer::render(double timestamp_secon
     SubtitleOverlay text_overlay;
     if (text_renderer_.available()) {
       text_overlay = text_renderer_.render(timestamp_seconds, &text_region);
+    } else if (ass_text_renderer_.available()) {
+      text_overlay = ass_text_renderer_.render(timestamp_seconds, &text_region);
     } else {
       text_overlay = SubtitleRenderer::buildOverlay(
           text_region,
