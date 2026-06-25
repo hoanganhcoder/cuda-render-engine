@@ -27,6 +27,9 @@
 #include <glib.h>
 #include <hb-ft.h>
 #include <hb.h>
+#if defined(VIDEO_ENGINE_HAS_FONTCONFIG)
+#include <fontconfig/fontconfig.h>
+#endif
 #elif defined(VIDEO_ENGINE_HAS_HARFBUZZ)
 #include <glib.h>
 #include <hb.h>
@@ -173,6 +176,46 @@ std::string normalizeCueText(const std::string& text, bool uppercase) {
 }
 
 #if defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
+std::string resolveSystemFontPath(const std::string& family, bool bold, bool italic) {
+#if defined(VIDEO_ENGINE_HAS_FONTCONFIG)
+  if (family.empty()) {
+    return {};
+  }
+
+  FcInit();
+  FcPattern* pattern = FcPatternCreate();
+  if (!pattern) {
+    return {};
+  }
+
+  FcPatternAddString(pattern, FC_FAMILY, reinterpret_cast<const FcChar8*>(family.c_str()));
+  FcPatternAddInteger(pattern, FC_WEIGHT, bold ? FC_WEIGHT_BOLD : FC_WEIGHT_REGULAR);
+  FcPatternAddInteger(pattern, FC_SLANT, italic ? FC_SLANT_ITALIC : FC_SLANT_ROMAN);
+  FcConfigSubstitute(nullptr, pattern, FcMatchPattern);
+  FcDefaultSubstitute(pattern);
+
+  FcResult result = FcResultNoMatch;
+  FcPattern* match = FcFontMatch(nullptr, pattern, &result);
+  FcPatternDestroy(pattern);
+  if (!match) {
+    return {};
+  }
+
+  FcChar8* file = nullptr;
+  std::string resolved;
+  if (FcPatternGetString(match, FC_FILE, 0, &file) == FcResultMatch && file != nullptr) {
+    resolved = reinterpret_cast<const char*>(file);
+  }
+  FcPatternDestroy(match);
+  return resolved;
+#else
+  (void)family;
+  (void)bold;
+  (void)italic;
+  return {};
+#endif
+}
+
 struct GlyphCacheKey {
   uint32_t glyph_index = 0;
   int font_pixels = 0;
@@ -367,14 +410,22 @@ void TextBoxRenderer::initialize(const RenderJob& job, int video_width, int vide
 #if !defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
   return;
 #else
-  if (impl_->cues.empty() || job.subtitle_font_path.empty()) {
+  if (impl_->cues.empty()) {
+    return;
+  }
+
+  std::string resolved_font_path = job.subtitle_font_path;
+  if (resolved_font_path.empty()) {
+    resolved_font_path = resolveSystemFontPath(job.subtitle_font_family, job.subtitle_bold, job.subtitle_italic);
+  }
+  if (resolved_font_path.empty()) {
     return;
   }
 
   if (FT_Init_FreeType(&impl_->ft_library) != 0) {
     return;
   }
-  if (FT_New_Face(impl_->ft_library, job.subtitle_font_path.c_str(), 0, &impl_->ft_face) != 0) {
+  if (FT_New_Face(impl_->ft_library, resolved_font_path.c_str(), 0, &impl_->ft_face) != 0) {
     return;
   }
   const bool face_is_bold = (impl_->ft_face->style_flags & FT_STYLE_FLAG_BOLD) != 0;
