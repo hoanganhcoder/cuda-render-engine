@@ -45,6 +45,8 @@ __device__ float clamp01(float value) {
   return fminf(1.0f, fmaxf(0.0f, value));
 }
 
+__device__ int computeBlurRadius(const DeviceRegion& region);
+
 __device__ int clampInt(int value, int low, int high) {
   return max(low, min(high, value));
 }
@@ -82,6 +84,22 @@ __device__ float edgeMask(const DeviceRegion& region, int x, int y) {
   }
   const float t = clamp01(distance / region.feather);
   return 1.0f - (t * t * (3.0f - 2.0f * t));
+}
+
+__device__ bool isInsideExpandedRegion(const DeviceRegion& region, int x, int y) {
+  const int expand_x = max(2, static_cast<int>(region.feather) + computeBlurRadius(region) * 2);
+  const int expand_y = max(2, static_cast<int>(region.feather * 0.5f) + max(1, computeBlurRadius(region) / 2));
+  return x >= region.x - expand_x && x < region.x + region.w + expand_x && y >= region.y - expand_y &&
+         y < region.y + region.h + expand_y;
+}
+
+__device__ bool isAffectedByAnyRegion(int x, int y, int region_count) {
+  for (int i = 0; i < region_count; ++i) {
+    if (isInsideExpandedRegion(kDeviceRegions[i], x, y)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 __device__ float normalizeByte(uint8_t value) {
@@ -148,15 +166,21 @@ __global__ void gaussianHorizontalLumaKernel(
     int pitch_y,
     int width,
     int height,
+    int origin_x,
+    int origin_y,
+    int roi_width,
+    int roi_height,
     float video_scale,
     bool flip_horizontal,
     int blur_radius,
     float sigma_x) {
-  const int x = blockIdx.x * blockDim.x + threadIdx.x;
-  const int y = blockIdx.y * blockDim.y + threadIdx.y;
-  if (x >= width || y >= height) {
+  const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int local_y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (local_x >= roi_width || local_y >= roi_height) {
     return;
   }
+  const int x = origin_x + local_x;
+  const int y = origin_y + local_y;
 
   float accum = 0.0f;
   float total_weight = 0.0f;
@@ -172,23 +196,28 @@ __global__ void gaussianHorizontalLumaKernel(
 
 __global__ void gaussianVerticalLumaKernel(
     const uint8_t* temp_y,
-    const uint8_t* source_y,
     const uint8_t* previous_y,
     uint8_t* output_y,
     int pitch_y,
     int width,
     int height,
+    int origin_x,
+    int origin_y,
+    int roi_width,
+    int roi_height,
     int region_count,
     int blur_radius_y,
     float sigma_y,
     DeviceSubtitleOverlay overlay) {
-  const int x = blockIdx.x * blockDim.x + threadIdx.x;
-  const int y = blockIdx.y * blockDim.y + threadIdx.y;
-  if (x >= width || y >= height) {
+  const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int local_y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (local_x >= roi_width || local_y >= roi_height) {
     return;
   }
+  const int x = origin_x + local_x;
+  const int y = origin_y + local_y;
 
-  float current = normalizeByte(loadLuma(source_y, pitch_y, width, height, x, y));
+  float current = normalizeByte(loadLuma(temp_y, pitch_y, width, height, x, y));
   float blur_value = current;
   float accum = 0.0f;
   float total_weight = 0.0f;
@@ -227,17 +256,26 @@ __global__ void gaussianHorizontalChromaKernel(
     int pitch_uv,
     int width,
     int height,
+    int origin_x,
+    int origin_y,
+    int roi_width,
+    int roi_height,
     float video_scale,
     bool flip_horizontal,
     int blur_radius,
     float sigma_x) {
-  const int x = blockIdx.x * blockDim.x + threadIdx.x;
-  const int y = blockIdx.y * blockDim.y + threadIdx.y;
   const int chroma_width = width / 2;
   const int chroma_height = height / 2;
-  if (x >= chroma_width || y >= chroma_height) {
+  const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int local_y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (local_x >= roi_width || local_y >= roi_height) {
     return;
   }
+  const int x = origin_x + local_x;
+  const int y = origin_y + local_y;
+
+  const int full_x = x * 2;
+  const int full_y = y * 2;
 
   float accum_u = 0.0f;
   float accum_v = 0.0f;
@@ -259,29 +297,34 @@ __global__ void gaussianHorizontalChromaKernel(
 
 __global__ void gaussianVerticalChromaKernel(
     const uint8_t* temp_uv,
-    const uint8_t* source_uv,
     const uint8_t* previous_uv,
     uint8_t* output_uv,
     int pitch_uv,
     int width,
     int height,
+    int origin_x,
+    int origin_y,
+    int roi_width,
+    int roi_height,
     int region_count,
     int blur_radius_y,
     float sigma_y,
     DeviceSubtitleOverlay overlay) {
-  const int x = blockIdx.x * blockDim.x + threadIdx.x;
-  const int y = blockIdx.y * blockDim.y + threadIdx.y;
   const int chroma_width = width / 2;
   const int chroma_height = height / 2;
-  if (x >= chroma_width || y >= chroma_height) {
+  const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int local_y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (local_x >= roi_width || local_y >= roi_height) {
     return;
   }
+  const int x = origin_x + local_x;
+  const int y = origin_y + local_y;
 
   const int full_x = x * 2;
   const int full_y = y * 2;
-  const uchar2 source = loadChroma(source_uv, pitch_uv, chroma_width, chroma_height, x, y);
-  float current_u = normalizeByte(source.x);
-  float current_v = normalizeByte(source.y);
+  const uchar2 current = loadChroma(temp_uv, pitch_uv, chroma_width, chroma_height, x, y);
+  float current_u = normalizeByte(current.x);
+  float current_v = normalizeByte(current.y);
 
   float accum_u = 0.0f;
   float accum_v = 0.0f;
@@ -529,71 +572,140 @@ void CudaSubtitleRectEffect::apply(
   dim3 block(16, 16);
   dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
   if (gaussian_blur && region_count > 0) {
-    int max_radius_x = 0;
-    int max_radius_y = 0;
-    float max_sigma_x = 1.0f;
-    float max_sigma_y = 1.0f;
-    for (int i = 0; i < region_count; ++i) {
-      const DeviceRegion& region = device_regions[static_cast<size_t>(i)];
-      const int radius_x = computeBlurRadiusHost(region);
-      const int radius_y = max(1, static_cast<int>(static_cast<float>(radius_x) * fmaxf(region.vertical_stretch, 0.9f) * 0.35f));
-      max_radius_x = max(max_radius_x, radius_x);
-      max_radius_y = max(max_radius_y, radius_y);
-      max_sigma_x = fmaxf(max_sigma_x, fmaxf(1.6f, static_cast<float>(radius_x) * 0.85f));
-      max_sigma_y = fmaxf(max_sigma_y, fmaxf(1.2f, static_cast<float>(radius_y) * 0.85f));
-    }
-
-    temp_luma_.allocate(static_cast<size_t>(source_frame->linesize[0]) * static_cast<size_t>(height));
-    temp_chroma_.allocate(static_cast<size_t>(source_frame->linesize[1]) * static_cast<size_t>(height / 2));
-
-    gaussianHorizontalLumaKernel<<<grid, block, 0, stream>>>(
-        source_y,
-        temp_luma_.data(),
-        source_frame->linesize[0],
-        width,
-        height,
-        video_scale,
-        flip_horizontal,
-        max_radius_x,
-        max_sigma_x);
-    gaussianVerticalLumaKernel<<<grid, block, 0, stream>>>(
-        temp_luma_.data(),
+    subtitleRectLumaKernel<<<grid, block, 0, stream>>>(
         source_y,
         previous_y,
         output_y,
         source_frame->linesize[0],
         width,
         height,
-        region_count,
-        max_radius_y,
-        max_sigma_y,
-        text_overlay);
-
-    dim3 chroma_grid(((width / 2) + block.x - 1) / block.x, ((height / 2) + block.y - 1) / block.y);
-    const int chroma_radius_x = max(1, (max_radius_x + 1) / 3);
-    const int chroma_radius_y = max(1, (max_radius_y + 1) / 3);
-    gaussianHorizontalChromaKernel<<<chroma_grid, block, 0, stream>>>(
-        source_uv,
-        temp_chroma_.data(),
-        source_frame->linesize[1],
-        width,
-        height,
+        0,
         video_scale,
         flip_horizontal,
-        chroma_radius_x,
-        fmaxf(1.0f, static_cast<float>(chroma_radius_x) * 0.8f));
-    gaussianVerticalChromaKernel<<<chroma_grid, block, 0, stream>>>(
-        temp_chroma_.data(),
+        false,
+        text_overlay);
+    dim3 base_chroma_grid(((width / 2) + block.x - 1) / block.x, ((height / 2) + block.y - 1) / block.y);
+    subtitleRectChromaKernel<<<base_chroma_grid, block, 0, stream>>>(
         source_uv,
         previous_uv,
         output_uv,
         source_frame->linesize[1],
         width,
         height,
-        region_count,
-        chroma_radius_y,
-        fmaxf(1.0f, static_cast<float>(chroma_radius_y) * 0.8f),
+        0,
+        video_scale,
+        flip_horizontal,
+        false,
         text_overlay);
+
+    int max_radius_x = 0;
+    int max_radius_y = 0;
+    float max_sigma_x = 1.0f;
+    float max_sigma_y = 1.0f;
+    int roi_x0 = width;
+    int roi_y0 = height;
+    int roi_x1 = 0;
+    int roi_y1 = 0;
+    for (int i = 0; i < region_count; ++i) {
+      const DeviceRegion& region = device_regions[static_cast<size_t>(i)];
+      const int radius_x = computeBlurRadiusHost(region);
+      const int radius_y = max(1, static_cast<int>(static_cast<float>(radius_x) * fmaxf(region.vertical_stretch, 0.75f) * 0.12f));
+      max_radius_x = max(max_radius_x, radius_x);
+      max_radius_y = max(max_radius_y, radius_y);
+      max_sigma_x = fmaxf(max_sigma_x, fmaxf(1.8f, static_cast<float>(radius_x) * 1.1f));
+      max_sigma_y = fmaxf(max_sigma_y, fmaxf(0.9f, static_cast<float>(radius_y) * 0.75f));
+      const int expand_x = max(2, static_cast<int>(region.feather) + radius_x * 2);
+      const int expand_y = max(2, static_cast<int>(region.feather * 0.5f) + max(1, radius_y));
+      roi_x0 = min(roi_x0, max(0, region.x - expand_x));
+      roi_y0 = min(roi_y0, max(0, region.y - expand_y));
+      roi_x1 = max(roi_x1, min(width, region.x + region.w + expand_x));
+      roi_y1 = max(roi_y1, min(height, region.y + region.h + expand_y));
+    }
+
+    if (roi_x1 <= roi_x0 || roi_y1 <= roi_y0) {
+      throwOnCudaError(cudaGetLastError(), "Subtitle rectangle NV12 CUDA kernel failed");
+      return;
+    }
+
+    const int roi_width = roi_x1 - roi_x0;
+    const int roi_height = roi_y1 - roi_y0;
+    dim3 roi_grid((roi_width + block.x - 1) / block.x, (roi_height + block.y - 1) / block.y);
+
+    temp_luma_.allocate(static_cast<size_t>(source_frame->linesize[0]) * static_cast<size_t>(height));
+    temp_chroma_.allocate(static_cast<size_t>(source_frame->linesize[1]) * static_cast<size_t>(height / 2));
+
+    gaussianHorizontalLumaKernel<<<roi_grid, block, 0, stream>>>(
+        source_y,
+        temp_luma_.data(),
+        source_frame->linesize[0],
+        width,
+        height,
+        roi_x0,
+        roi_y0,
+        roi_width,
+        roi_height,
+        video_scale,
+        flip_horizontal,
+        max_radius_x,
+        max_sigma_x);
+    gaussianVerticalLumaKernel<<<roi_grid, block, 0, stream>>>(
+        temp_luma_.data(),
+        previous_y,
+        output_y,
+        source_frame->linesize[0],
+        width,
+        height,
+        roi_x0,
+        roi_y0,
+        roi_width,
+        roi_height,
+        region_count,
+        max_radius_y,
+        max_sigma_y,
+        text_overlay);
+
+    const int chroma_roi_x0 = roi_x0 / 2;
+    const int chroma_roi_y0 = roi_y0 / 2;
+    const int chroma_roi_x1 = (roi_x1 + 1) / 2;
+    const int chroma_roi_y1 = (roi_y1 + 1) / 2;
+    const int chroma_roi_width = max(0, chroma_roi_x1 - chroma_roi_x0);
+    const int chroma_roi_height = max(0, chroma_roi_y1 - chroma_roi_y0);
+    dim3 chroma_grid(
+        (chroma_roi_width + block.x - 1) / block.x,
+        (chroma_roi_height + block.y - 1) / block.y);
+    const int chroma_radius_x = max(1, (max_radius_x + 1) / 3);
+    const int chroma_radius_y = max(1, (max_radius_y + 1) / 3);
+    if (chroma_roi_width > 0 && chroma_roi_height > 0) {
+      gaussianHorizontalChromaKernel<<<chroma_grid, block, 0, stream>>>(
+          source_uv,
+          temp_chroma_.data(),
+          source_frame->linesize[1],
+          width,
+          height,
+          chroma_roi_x0,
+          chroma_roi_y0,
+          chroma_roi_width,
+          chroma_roi_height,
+          video_scale,
+          flip_horizontal,
+          chroma_radius_x,
+          fmaxf(1.0f, static_cast<float>(chroma_radius_x) * 0.8f));
+      gaussianVerticalChromaKernel<<<chroma_grid, block, 0, stream>>>(
+          temp_chroma_.data(),
+          previous_uv,
+          output_uv,
+          source_frame->linesize[1],
+          width,
+          height,
+          chroma_roi_x0,
+          chroma_roi_y0,
+          chroma_roi_width,
+          chroma_roi_height,
+          region_count,
+          chroma_radius_y,
+          fmaxf(1.0f, static_cast<float>(chroma_radius_y) * 0.8f),
+          text_overlay);
+    }
   } else {
     subtitleRectLumaKernel<<<grid, block, 0, stream>>>(
         source_y,
