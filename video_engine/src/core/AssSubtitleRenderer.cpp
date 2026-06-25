@@ -22,6 +22,9 @@ extern "C" {
 #include <ass/ass.h>
 }
 #endif
+#if defined(VIDEO_ENGINE_HAS_HARFBUZZ)
+#include <hb.h>
+#endif
 
 namespace video_engine {
 
@@ -148,80 +151,14 @@ void appendUtf8CodePoint(std::string& output, char32_t code_point) {
 }
 
 char32_t uppercaseCodePoint(char32_t code_point) {
+#if defined(VIDEO_ENGINE_HAS_HARFBUZZ)
+  return static_cast<char32_t>(hb_unicode_toupper(hb_unicode_funcs_get_default(), static_cast<hb_codepoint_t>(code_point)));
+#else
   if (code_point >= U'a' && code_point <= U'z') {
     return code_point - (U'a' - U'A');
   }
-
-  switch (code_point) {
-    case U'\u00E0': return U'\u00C0';
-    case U'\u00E1': return U'\u00C1';
-    case U'\u1EA3': return U'\u1EA2';
-    case U'\u00E3': return U'\u00C3';
-    case U'\u1EA1': return U'\u1EA0';
-    case U'\u0103': return U'\u0102';
-    case U'\u1EB1': return U'\u1EB0';
-    case U'\u1EAF': return U'\u1EAE';
-    case U'\u1EB3': return U'\u1EB2';
-    case U'\u1EB5': return U'\u1EB4';
-    case U'\u1EB7': return U'\u1EB6';
-    case U'\u00E2': return U'\u00C2';
-    case U'\u1EA7': return U'\u1EA6';
-    case U'\u1EA5': return U'\u1EA4';
-    case U'\u1EA9': return U'\u1EA8';
-    case U'\u1EAB': return U'\u1EAA';
-    case U'\u1EAD': return U'\u1EAC';
-    case U'\u00E8': return U'\u00C8';
-    case U'\u00E9': return U'\u00C9';
-    case U'\u1EBB': return U'\u1EBA';
-    case U'\u1EBD': return U'\u1EBC';
-    case U'\u1EB9': return U'\u1EB8';
-    case U'\u00EA': return U'\u00CA';
-    case U'\u1EC1': return U'\u1EC0';
-    case U'\u1EBF': return U'\u1EBE';
-    case U'\u1EC3': return U'\u1EC2';
-    case U'\u1EC5': return U'\u1EC4';
-    case U'\u1EC7': return U'\u1EC6';
-    case U'\u00EC': return U'\u00CC';
-    case U'\u00ED': return U'\u00CD';
-    case U'\u1EC9': return U'\u1EC8';
-    case U'\u0129': return U'\u0128';
-    case U'\u1ECB': return U'\u1ECA';
-    case U'\u00F2': return U'\u00D2';
-    case U'\u00F3': return U'\u00D3';
-    case U'\u1ECF': return U'\u1ECE';
-    case U'\u00F5': return U'\u00D5';
-    case U'\u1ECD': return U'\u1ECC';
-    case U'\u00F4': return U'\u00D4';
-    case U'\u1ED3': return U'\u1ED2';
-    case U'\u1ED1': return U'\u1ED0';
-    case U'\u1ED5': return U'\u1ED4';
-    case U'\u1ED7': return U'\u1ED6';
-    case U'\u1ED9': return U'\u1ED8';
-    case U'\u01A1': return U'\u01A0';
-    case U'\u1EDD': return U'\u1EDC';
-    case U'\u1EDB': return U'\u1EDA';
-    case U'\u1EDF': return U'\u1EDE';
-    case U'\u1EE1': return U'\u1EE0';
-    case U'\u1EE3': return U'\u1EE2';
-    case U'\u00F9': return U'\u00D9';
-    case U'\u00FA': return U'\u00DA';
-    case U'\u1EE7': return U'\u1EE6';
-    case U'\u0169': return U'\u0168';
-    case U'\u1EE5': return U'\u1EE4';
-    case U'\u01B0': return U'\u01AF';
-    case U'\u1EEB': return U'\u1EEA';
-    case U'\u1EE9': return U'\u1EE8';
-    case U'\u1EED': return U'\u1EEC';
-    case U'\u1EEF': return U'\u1EEE';
-    case U'\u1EF1': return U'\u1EF0';
-    case U'\u1EF3': return U'\u1EF2';
-    case U'\u00FD': return U'\u00DD';
-    case U'\u1EF7': return U'\u1EF6';
-    case U'\u1EF9': return U'\u1EF8';
-    case U'\u1EF5': return U'\u1EF4';
-    case U'\u0111': return U'\u0110';
-    default: return code_point;
-  }
+  return code_point;
+#endif
 }
 
 size_t countUtf8CodePoints(const std::string& text) {
