@@ -24,9 +24,11 @@
 #include FT_OUTLINE_H
 #include FT_STROKER_H
 #include FT_SYNTHESIS_H
+#include <glib.h>
 #include <hb-ft.h>
 #include <hb.h>
 #elif defined(VIDEO_ENGINE_HAS_HARFBUZZ)
+#include <glib.h>
 #include <hb.h>
 #endif
 
@@ -114,8 +116,8 @@ void appendUtf8CodePoint(std::string& output, char32_t code_point) {
 }
 
 char32_t uppercaseCodePoint(char32_t code_point) {
-#if defined(VIDEO_ENGINE_HAS_HARFBUZZ)
-  return static_cast<char32_t>(hb_unicode_toupper(hb_unicode_funcs_get_default(), static_cast<hb_codepoint_t>(code_point)));
+#if defined(VIDEO_ENGINE_HAS_HARFBUZZ) || defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
+  return static_cast<char32_t>(g_unichar_toupper(static_cast<gunichar>(code_point)));
 #else
   if (code_point >= U'a' && code_point <= U'z') {
     return code_point - (U'a' - U'A');
