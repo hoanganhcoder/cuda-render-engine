@@ -367,6 +367,10 @@ struct TextBoxRenderer::Impl {
   std::vector<SubtitleCue> cues;
 #if defined(VIDEO_ENGINE_HAS_PANGO)
   bool prefer_pango = false;
+  bool exact_font_face = false;
+  bool exact_font_face_bold = false;
+  bool exact_font_face_italic = false;
+  std::string resolved_font_family;
 #endif
 #if defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
   FT_Library ft_library = nullptr;
@@ -424,6 +428,13 @@ void TextBoxRenderer::initialize(const RenderJob& job, int video_width, int vide
   impl_->font_pixels = job.resolveSubtitleFontPixels(video_height);
   impl_->cues.clear();
   available_ = false;
+#if defined(VIDEO_ENGINE_HAS_PANGO)
+  impl_->prefer_pango = false;
+  impl_->exact_font_face = false;
+  impl_->exact_font_face_bold = false;
+  impl_->exact_font_face_italic = false;
+  impl_->resolved_font_family = job.subtitle_font_family;
+#endif
 
   if (!job.subtitle_srt.empty()) {
     impl_->cues = SrtParser::parseFile(job.subtitle_srt);
@@ -436,6 +447,22 @@ void TextBoxRenderer::initialize(const RenderJob& job, int video_width, int vide
     if (!job.subtitle_font_path.empty()) {
       FcInit();
       FcConfigAppFontAddFile(FcConfigGetCurrent(), reinterpret_cast<const FcChar8*>(job.subtitle_font_path.c_str()));
+#if defined(VIDEO_ENGINE_HAS_TEXTBOX_RENDERER)
+      FT_Library metadata_library = nullptr;
+      FT_Face metadata_face = nullptr;
+      if (FT_Init_FreeType(&metadata_library) == 0) {
+        if (FT_New_Face(metadata_library, job.subtitle_font_path.c_str(), 0, &metadata_face) == 0) {
+          if (metadata_face->family_name != nullptr && metadata_face->family_name[0] != '\0') {
+            impl_->resolved_font_family = metadata_face->family_name;
+          }
+          impl_->exact_font_face = true;
+          impl_->exact_font_face_bold = (metadata_face->style_flags & FT_STYLE_FLAG_BOLD) != 0;
+          impl_->exact_font_face_italic = (metadata_face->style_flags & FT_STYLE_FLAG_ITALIC) != 0;
+          FT_Done_Face(metadata_face);
+        }
+        FT_Done_FreeType(metadata_library);
+      }
+#endif
     }
     impl_->prefer_pango = true;
     available_ = true;
@@ -544,9 +571,11 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
     PangoLayout* layout = pango_cairo_create_layout(cr);
     PangoFontDescription* desc = pango_font_description_new();
-    pango_font_description_set_family(desc, impl_->job.subtitle_font_family.c_str());
-    pango_font_description_set_weight(desc, impl_->job.subtitle_bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
-    pango_font_description_set_style(desc, impl_->job.subtitle_italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
+    pango_font_description_set_family(desc, impl_->resolved_font_family.c_str());
+    const bool request_bold = impl_->exact_font_face ? impl_->exact_font_face_bold : impl_->job.subtitle_bold;
+    const bool request_italic = impl_->exact_font_face ? impl_->exact_font_face_italic : impl_->job.subtitle_italic;
+    pango_font_description_set_weight(desc, request_bold ? PANGO_WEIGHT_BOLD : PANGO_WEIGHT_NORMAL);
+    pango_font_description_set_style(desc, request_italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
     pango_layout_set_alignment(layout, toPangoAlignment(impl_->job.subtitle_align_h));
     pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
     pango_layout_set_width(layout, usable_width * PANGO_SCALE);
