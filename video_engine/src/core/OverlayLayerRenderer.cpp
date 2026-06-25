@@ -1,4 +1,4 @@
-#include "core/WatermarkRenderer.h"
+#include "core/OverlayLayerRenderer.h"
 
 #include <algorithm>
 #include <cmath>
@@ -266,7 +266,7 @@ SubtitleOverlay logoToOverlay(const DecodedRgbaImage& logo, const Region& region
 
 }  // namespace
 
-struct WatermarkRenderer::Impl {
+struct OverlayLayerRenderer::Impl {
   RenderJob source_job;
   RenderJob text_job;
   int video_width = 0;
@@ -276,12 +276,12 @@ struct WatermarkRenderer::Impl {
   DecodedRgbaImage logo_image;
 };
 
-WatermarkRenderer::WatermarkRenderer() : impl_(std::make_unique<Impl>()) {
+OverlayLayerRenderer::OverlayLayerRenderer() : impl_(std::make_unique<Impl>()) {
 }
 
-WatermarkRenderer::~WatermarkRenderer() = default;
+OverlayLayerRenderer::~OverlayLayerRenderer() = default;
 
-void WatermarkRenderer::initialize(const RenderJob& job, int video_width, int video_height) {
+void OverlayLayerRenderer::initialize(const RenderJob& job, int video_width, int video_height) {
   impl_->source_job = job;
   impl_->video_width = video_width;
   impl_->video_height = video_height;
@@ -328,7 +328,7 @@ void WatermarkRenderer::initialize(const RenderJob& job, int video_width, int vi
   }
 }
 
-std::vector<SubtitleOverlay> WatermarkRenderer::render(double timestamp_seconds) const {
+std::vector<SubtitleOverlay> OverlayLayerRenderer::render(double timestamp_seconds) const {
   std::vector<SubtitleOverlay> overlays;
 
   if (impl_->logo_enabled && impl_->logo_image.width > 0 && impl_->logo_image.height > 0) {
@@ -402,7 +402,7 @@ std::vector<SubtitleOverlay> WatermarkRenderer::render(double timestamp_seconds)
   return overlays;
 }
 
-bool WatermarkRenderer::available() const {
+bool OverlayLayerRenderer::available() const {
   return impl_->logo_enabled || impl_->text_enabled;
 }
 

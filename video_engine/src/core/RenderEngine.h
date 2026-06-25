@@ -9,10 +9,12 @@ extern "C" {
 #include "codec/FFmpegDecoder.h"
 #include "codec/FFmpegEncoder.h"
 #include "core/AssSubtitleRenderer.h"
+#include "core/BlurBoxEffect.h"
+#include "core/OverlayLayerRenderer.h"
 #include "core/RenderJob.h"
 #include "core/SubtitleOverlay.h"
 #include "core/TextBoxRenderer.h"
-#include "core/WatermarkRenderer.h"
+#include "core/timeline/Sequence.h"
 #include "cuda/CudaContext.h"
 #include "cuda/CudaBuffer.h"
 #include "cuda/CudaSubtitleRectEffect.h"
@@ -40,10 +42,10 @@ private:
   CudaBuffer subtitle_luma_buffer_;
   CudaBuffer subtitle_chroma_u_buffer_;
   CudaBuffer subtitle_chroma_v_buffer_;
+  BlurBoxEffect blur_box_effect_;
+  OverlayLayerRenderer overlay_layer_renderer_;
   TextBoxRenderer text_box_renderer_;
   AssSubtitleRenderer ass_subtitle_renderer_;
-  WatermarkRenderer watermark_renderer_;
-  CudaSubtitleRectEffect subtitle_effect_;
 };
 
 }  // namespace video_engine

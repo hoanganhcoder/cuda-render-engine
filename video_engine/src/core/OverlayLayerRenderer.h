@@ -9,13 +9,13 @@
 
 namespace video_engine {
 
-class WatermarkRenderer {
+class OverlayLayerRenderer {
 public:
-  WatermarkRenderer();
-  ~WatermarkRenderer();
+  OverlayLayerRenderer();
+  ~OverlayLayerRenderer();
 
-  WatermarkRenderer(const WatermarkRenderer&) = delete;
-  WatermarkRenderer& operator=(const WatermarkRenderer&) = delete;
+  OverlayLayerRenderer(const OverlayLayerRenderer&) = delete;
+  OverlayLayerRenderer& operator=(const OverlayLayerRenderer&) = delete;
 
   void initialize(const RenderJob& job, int video_width, int video_height);
   std::vector<SubtitleOverlay> render(double timestamp_seconds) const;

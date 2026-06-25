@@ -56,6 +56,13 @@ job = {
         "outline": 4,
         "shadow": 0,
         "margin": 12,
+        "wrap": True,
+        "clip": True,
+        "auto_fit": True,
+        "padding_x": 24,
+        "padding_y": 10,
+        "align_h": "center",
+        "align_v": "middle",
         "opacity": 1.0,
         "regions": [
             {

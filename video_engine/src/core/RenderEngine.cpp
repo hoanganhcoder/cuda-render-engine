@@ -9,6 +9,7 @@
 
 #include "core/Logger.h"
 #include "core/SubtitleRenderer.h"
+#include "core/timeline/RenderJobAdapter.h"
 
 namespace video_engine {
 
@@ -138,6 +139,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
   AVFrame* previous_frame = nullptr;
   try {
     RenderJob job = input_job;
+    const timeline::Sequence sequence_input = timeline::RenderJobAdapter::toSequence(job);
     FFmpegDecoder decoder;
     FFmpegEncoder encoder;
     AVFrame* decoded_frame = nullptr;
@@ -161,9 +163,11 @@ bool RenderEngine::render(const RenderJob& input_job) {
     for (Region& region : job.regions) {
       region.clampToBounds(job.width, job.height);
     }
+    (void)sequence_input;
+    blur_box_effect_.initialize(sequence_input);
     text_box_renderer_.initialize(job, job.width, job.height);
     ass_subtitle_renderer_.initialize(job, job.width, job.height);
-    watermark_renderer_.initialize(job, job.width, job.height);
+    overlay_layer_renderer_.initialize(job, job.width, job.height);
     if (!job.subtitle_srt.empty() || !job.subtitle_text.empty()) {
       if (text_box_renderer_.available()) {
         Logger::info("Using TextBoxRenderer subtitle renderer.");
@@ -194,6 +198,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
       }
 
       const std::vector<Region> active_regions = collectActiveRegions(job, timestamp_seconds);
+      const std::vector<Region> active_blur_regions = blur_box_effect_.collectActiveRegions(timestamp_seconds);
       current_overlay = buildSubtitleOverlay(job, active_regions, timestamp_seconds);
       if (current_overlay.enabled) {
         subtitle_mask_buffer_.upload(current_overlay.alpha_mask, cuda_context_.stream());
@@ -222,14 +227,13 @@ bool RenderEngine::render(const RenderJob& input_job) {
         device_overlay.opacity = current_overlay.opacity;
       }
 
-      subtitle_effect_.apply(
+      blur_box_effect_.apply(
           decoded_frame,
           frame_index > 0 ? previous_frame : nullptr,
           output_frame,
-          active_regions,
+          active_blur_regions,
           job.video_scale,
           job.flip_horizontal,
-          job.subtitle_gaussian_blur,
           device_overlay,
           cuda_context_.stream());
       output_frame->format = AV_PIX_FMT_CUDA;
@@ -296,9 +300,9 @@ SubtitleOverlay RenderEngine::buildSubtitleOverlay(
     }
   }
 
-  if (watermark_renderer_.available()) {
-    const std::vector<SubtitleOverlay> watermark_overlays = watermark_renderer_.render(timestamp_seconds);
-    overlays.insert(overlays.end(), watermark_overlays.begin(), watermark_overlays.end());
+  if (overlay_layer_renderer_.available()) {
+    const std::vector<SubtitleOverlay> overlay_layers = overlay_layer_renderer_.render(timestamp_seconds);
+    overlays.insert(overlays.end(), overlay_layers.begin(), overlay_layers.end());
   }
 
   return combineOverlays(overlays, job.width, job.height);

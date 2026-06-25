@@ -8,6 +8,8 @@ The current pipeline is GPU-only and zero-copy:
 ## Architecture
 
 - `src/core`: render job parsing, orchestration, logging, region models, render loop.
+- `src/core/timeline`: editor-style sequence/layer specs and adapters.
+- `src/core`: text-box renderer, blur-box effect, and overlay-layer rendering.
 - `src/codec`: FFmpeg hardware decode/encode using `AV_PIX_FMT_CUDA` frames.
 - `src/cuda`: CUDA stream/context and the NV12 subtitle-rect effect kernel.
 - `src/bindings`: Python entrypoints `video_engine.render(job)` and `video_engine.version()`.
@@ -16,9 +18,11 @@ Current render flow:
 
 1. Demux packets with FFmpeg.
 2. Decode with NVDEC into CUDA hardware frames.
-3. Run the subtitle-rect effect directly on GPU NV12 planes.
-4. Encode with `h264_nvenc` from the processed CUDA frame.
-5. Mux MP4 output with FFmpeg.
+3. Render text-box overlays for subtitle/overlay layers.
+4. Apply blur-box regions directly on GPU NV12 planes.
+5. Composite text overlays on top of the blurred GPU frame.
+6. Encode with `h264_nvenc` from the processed CUDA frame.
+7. Mux MP4 output with FFmpeg.
 
 There is no CPU frame upload/download step in the hot path.
 
@@ -219,7 +223,13 @@ Nested job layout:
 - `flip_horizontal`: mirror the whole video left-to-right
 - `subtitle.size`, `watermark.size`: `%` of video height, not pixels
 - `subtitle.size` default is `1.5` and `subtitle.italic` default is `true`
-- long subtitle text auto-wraps inside `subtitle.regions[*].w` and stays centered
+- subtitle text is rendered as an editor-style text box inside `subtitle.regions[*]`
+- `subtitle.wrap`: wrap to the text box width
+- `subtitle.clip`: clip text strictly to the text box bounds
+- `subtitle.auto_fit`: shrink text if needed to fit the text box height
+- `subtitle.padding_x`, `subtitle.padding_y`: inner box padding
+- `subtitle.align_h`: `left|center|right`
+- `subtitle.align_v`: `top|middle|bottom`
 - `subtitle.upper`, `watermark.upper`: Unicode-aware uppercase before rendering
 - `subtitle.bold`, `subtitle.italic`, `subtitle.color`
 - `subtitle.outline_color`, `subtitle.back_color`, `subtitle.outline`, `subtitle.shadow`
@@ -237,6 +247,13 @@ Subtitle rendering path:
 - preferred subtitle text-box path: `TextBoxRenderer (FreeType + HarfBuzz)` for region-based layout and explicit line breaking
 - fallback subtitle path: `libass`
 - final fallback path: built-in bitmap renderer
+
+Editor-style model:
+
+- `subtitle.regions[*]` defines the subtitle text box
+- text layout uses `wrap/clip/auto_fit/padding/alignment`
+- blur is applied independently through the region mask path (`blur box`)
+- watermark text and logos are handled as overlay layers
 
 Recommended "fansub-style" defaults:
 

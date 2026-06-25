@@ -68,13 +68,16 @@ endif()
 set(VIDEO_ENGINE_SOURCES
   src/bindings/py_module.cpp
   src/core/AssSubtitleRenderer.cpp
+  src/core/BlurBoxEffect.cpp
   src/core/Logger.cpp
+  src/core/OverlayLayerRenderer.cpp
   src/core/RenderEngine.cpp
   src/core/RenderJob.cpp
   src/core/SrtParser.cpp
   src/core/SubtitleRenderer.cpp
   src/core/TextBoxRenderer.cpp
   src/core/WatermarkRenderer.cpp
+  src/core/timeline/RenderJobAdapter.cpp
   src/codec/FFmpegDecoder.cpp
   src/codec/FFmpegEncoder.cpp
   src/cuda/CudaBuffer.cpp
