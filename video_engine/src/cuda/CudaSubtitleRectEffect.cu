@@ -93,7 +93,7 @@ __device__ int computeBlurRadius(const DeviceRegion& region) {
   const float region_scale = fmaxf(static_cast<float>(region.h), static_cast<float>(region.w) * 0.18f);
   const float base_radius = region_scale * (0.10f + region.horizontal_blur * 0.22f);
   const float feather_boost = region.feather * 0.12f;
-  return clampInt(static_cast<int>(base_radius + feather_boost), 6, 48);
+  return clampInt(static_cast<int>(base_radius + feather_boost), 6, 28);
 }
 
 __device__ float gaussianWeight(int dx, int dy, float sigma_x, float sigma_y) {
@@ -178,9 +178,9 @@ __device__ uchar2 sampleGaussianChroma(
   const int chroma_height = height / 2;
   const int center_x = mapOutputToSourceCoord(x, width, video_scale, flip_horizontal, true) / 2;
   const int center_y = mapOutputToSourceCoord(y, height, video_scale, false, false) / 2;
-  const int radius = clampInt((computeBlurRadius(region) + 1) / 2, 1, 8);
-  const float sigma_x = fmaxf(1.5f, static_cast<float>(radius) * (0.9f + region.horizontal_blur * 0.35f));
-  const float sigma_y = fmaxf(1.3f, sigma_x * fmaxf(region.vertical_stretch, 0.95f));
+  const int radius = clampInt((computeBlurRadius(region) + 3) / 6, 1, 4);
+  const float sigma_x = fmaxf(1.0f, static_cast<float>(radius) * 0.9f);
+  const float sigma_y = fmaxf(1.0f, sigma_x * fmaxf(region.vertical_stretch, 0.95f));
 
   float accum_u = 0.0f;
   float accum_v = 0.0f;
@@ -280,12 +280,12 @@ __global__ void subtitleRectChromaKernel(
       continue;
     }
 
-    const uchar2 blur_uv =
-        gaussian_blur
-            ? sampleGaussianChroma(source_uv, pitch_uv, width, height, full_x, full_y, region, video_scale, flip_horizontal)
-            : current;
-    float blended_u = mixFloat(current_u, normalizeByte(blur_uv.x), mask);
-    float blended_v = mixFloat(current_v, normalizeByte(blur_uv.y), mask);
+    const uchar2 blur_uv = gaussian_blur
+                               ? sampleGaussianChroma(source_uv, pitch_uv, width, height, full_x, full_y, region, video_scale, flip_horizontal)
+                               : current;
+    const float chroma_mask = mask * 0.35f;
+    float blended_u = mixFloat(current_u, normalizeByte(blur_uv.x), chroma_mask);
+    float blended_v = mixFloat(current_v, normalizeByte(blur_uv.y), chroma_mask);
     if (previous_uv != nullptr && region.temporal_blend > 0.0f) {
       const uchar2 previous = loadChroma(previous_uv, pitch_uv, chroma_width, chroma_height, x, y);
       blended_u = mixFloat(blended_u, normalizeByte(previous.x), clamp01(region.temporal_blend * mask));
