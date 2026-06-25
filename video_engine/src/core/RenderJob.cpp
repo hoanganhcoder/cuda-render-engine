@@ -140,6 +140,13 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.subtitle_italic = optionalScopedAliasValue<bool>(subtitle_dict, job_dict, "italic", "i", "subtitle_italic", "subtitle_italic", true);
   job.subtitle_uppercase = optionalScopedAliasValue<bool>(subtitle_dict, job_dict, "upper", "uppercase", "subtitle_uppercase", "subtitle_uppercase", false);
   job.subtitle_opacity = optionalScopedValue<float>(subtitle_dict, job_dict, "opacity", "subtitle_opacity", 1.0f);
+  job.subtitle_wrap = optionalScopedValue<bool>(subtitle_dict, job_dict, "wrap", "subtitle_wrap", true);
+  job.subtitle_clip = optionalScopedValue<bool>(subtitle_dict, job_dict, "clip", "subtitle_clip", true);
+  job.subtitle_auto_fit = optionalScopedValue<bool>(subtitle_dict, job_dict, "auto_fit", "subtitle_auto_fit", true);
+  job.subtitle_padding_x = optionalScopedValue<int>(subtitle_dict, job_dict, "padding_x", "subtitle_padding_x", 0);
+  job.subtitle_padding_y = optionalScopedValue<int>(subtitle_dict, job_dict, "padding_y", "subtitle_padding_y", 0);
+  job.subtitle_align_h = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "align_h", "subtitle_align_h", "subtitle_align_h", "subtitle_align_h", "center");
+  job.subtitle_align_v = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "align_v", "subtitle_align_v", "subtitle_align_v", "subtitle_align_v", "middle");
 
   job.logo_path = optionalScopedAliasValue<std::string>(logo_dict, job_dict, "path", "logo_path", "logo_path", "logo_path", "");
   job.logo_scale = optionalScopedValue<float>(logo_dict, job_dict, "scale", "logo_scale", 0.18f);
@@ -235,6 +242,9 @@ void RenderJob::validate() const {
   if (subtitle_font_size <= 0.0f) {
     throw std::runtime_error("subtitle_font_size must be > 0 and expressed as % of video height.");
   }
+  if (subtitle_padding_x < 0 || subtitle_padding_y < 0) {
+    throw std::runtime_error("subtitle_padding_x/y must be >= 0.");
+  }
   if (subtitle_outline < 0) {
     throw std::runtime_error("subtitle_outline must be >= 0.");
   }
@@ -282,6 +292,22 @@ void RenderJob::validate() const {
   }
   if (subtitle_opacity < 0.0f || subtitle_opacity > 1.0f) {
     throw std::runtime_error("subtitle_opacity must be within [0, 1].");
+  }
+  const auto subtitle_align_h_lower = [&]() {
+    std::string value = subtitle_align_h;
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+  }();
+  const auto subtitle_align_v_lower = [&]() {
+    std::string value = subtitle_align_v;
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+  }();
+  if (subtitle_align_h_lower != "left" && subtitle_align_h_lower != "center" && subtitle_align_h_lower != "right") {
+    throw std::runtime_error("subtitle_align_h must be left, center, or right.");
+  }
+  if (subtitle_align_v_lower != "top" && subtitle_align_v_lower != "middle" && subtitle_align_v_lower != "bottom") {
+    throw std::runtime_error("subtitle_align_v must be top, middle, or bottom.");
   }
   if (watermark_opacity < 0.0f || watermark_opacity > 1.0f) {
     throw std::runtime_error("watermark_opacity must be within [0, 1].");

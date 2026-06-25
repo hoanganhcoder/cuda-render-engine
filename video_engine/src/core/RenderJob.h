@@ -35,6 +35,13 @@ struct RenderJob {
   bool subtitle_italic = true;
   bool subtitle_uppercase = false;
   float subtitle_opacity = 1.0f;
+  bool subtitle_wrap = true;
+  bool subtitle_clip = true;
+  bool subtitle_auto_fit = true;
+  int subtitle_padding_x = 0;
+  int subtitle_padding_y = 0;
+  std::string subtitle_align_h = "center";
+  std::string subtitle_align_v = "middle";
   std::string logo_path;
   float logo_scale = 0.18f;
   float logo_opacity = 0.22f;

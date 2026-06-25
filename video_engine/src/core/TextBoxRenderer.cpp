@@ -456,18 +456,24 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
   struct FittedLayout {
     int font_pixels = 0;
     int usable_width = 0;
+    int usable_height = 0;
     int line_height = 0;
+    int side_padding = 0;
     int top_padding = 0;
     std::vector<std::string> lines;
   };
 
   auto shape_lines_for_font = [&](int font_pixels) -> FittedLayout {
     set_font_size(font_pixels);
-    const int dynamic_side_padding = computeHorizontalSafetyPadding(
-        impl_->job.subtitle_margin,
+    const int intrinsic_side_padding = computeHorizontalSafetyPadding(
+        std::max(impl_->job.subtitle_margin / 2, 0),
         font_pixels,
         impl_->job.subtitle_outline,
         impl_->job.subtitle_italic);
+    const int dynamic_side_padding = std::max(impl_->job.subtitle_padding_x, intrinsic_side_padding);
+    const int dynamic_top_padding = std::max(
+        impl_->job.subtitle_padding_y,
+        std::max(impl_->job.subtitle_margin / 2, impl_->job.subtitle_outline * 2 + impl_->job.subtitle_shadow));
     const int dynamic_usable_width = std::max(1, anchor_region->w - dynamic_side_padding * 2);
 
     auto get_line_layout = [&](const std::string& line_text) -> const LineLayout& {
@@ -521,6 +527,10 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
       std::istringstream input(normalized_text);
       std::string raw_line;
       while (std::getline(input, raw_line, '\n')) {
+        if (!impl_->job.subtitle_wrap) {
+          lines.push_back(raw_line);
+          continue;
+        }
         std::istringstream words(raw_line);
         std::string word;
         std::string current;
@@ -549,21 +559,30 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     const int line_height = std::max<int>(
         ascender + static_cast<int>(impl_->job.subtitle_outline) * 2 + impl_->job.subtitle_shadow + 4,
         static_cast<int>(impl_->ft_face->size->metrics.height >> 6));
-    const int top_padding = std::max(impl_->job.subtitle_margin, impl_->job.subtitle_outline * 2 + impl_->job.subtitle_shadow);
-    return FittedLayout{font_pixels, dynamic_usable_width, line_height, top_padding, std::move(lines)};
+    const int dynamic_usable_height = std::max(1, anchor_region->h - dynamic_top_padding * 2);
+    return FittedLayout{
+        font_pixels,
+        dynamic_usable_width,
+        dynamic_usable_height,
+        line_height,
+        dynamic_side_padding,
+        dynamic_top_padding,
+        std::move(lines)};
   };
 
   const int requested_font_pixels = impl_->font_pixels;
   const int min_font_pixels = std::max(12, static_cast<int>(std::floor(static_cast<float>(requested_font_pixels) * 0.55f)));
   FittedLayout fitted = shape_lines_for_font(requested_font_pixels);
-  for (int font_pixels = requested_font_pixels; font_pixels >= min_font_pixels; --font_pixels) {
-    FittedLayout candidate = shape_lines_for_font(font_pixels);
-    const int total_height_candidate = candidate.line_height * static_cast<int>(candidate.lines.size());
-    if (total_height_candidate <= std::max(anchor_region->h - candidate.top_padding * 2, candidate.line_height)) {
+  if (impl_->job.subtitle_auto_fit) {
+    for (int font_pixels = requested_font_pixels; font_pixels >= min_font_pixels; --font_pixels) {
+      FittedLayout candidate = shape_lines_for_font(font_pixels);
+      const int total_height_candidate = candidate.line_height * static_cast<int>(candidate.lines.size());
+      if (total_height_candidate <= candidate.usable_height) {
+        fitted = std::move(candidate);
+        break;
+      }
       fitted = std::move(candidate);
-      break;
     }
-    fitted = std::move(candidate);
   }
 
   set_font_size(fitted.font_pixels);
@@ -578,10 +597,20 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
   const std::vector<std::string>& lines = fitted.lines;
   const int line_height = fitted.line_height;
+  const int side_padding = fitted.side_padding;
   const int top_padding = fitted.top_padding;
   const int total_height = line_height * static_cast<int>(lines.size());
-  const int usable_height = std::max(anchor_region->h - top_padding * 2, line_height);
-  const int base_top = anchor_region->y + top_padding + std::max(usable_height - total_height, 0) / 2;
+  const int usable_height = fitted.usable_height;
+  std::string align_h = impl_->job.subtitle_align_h;
+  std::transform(align_h.begin(), align_h.end(), align_h.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  std::string align_v = impl_->job.subtitle_align_v;
+  std::transform(align_v.begin(), align_v.end(), align_v.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  int base_top = anchor_region->y + top_padding;
+  if (align_v == "middle") {
+    base_top += std::max(usable_height - total_height, 0) / 2;
+  } else if (align_v == "bottom") {
+    base_top += std::max(usable_height - total_height, 0);
+  }
 
   struct DrawGlyph {
     const GlyphCacheValue* bitmap = nullptr;
@@ -665,7 +694,13 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
   for (size_t line_index = 0; line_index < lines.size(); ++line_index) {
     const LineLayout& line_layout = get_line_layout(lines[line_index]);
-    const float line_left = static_cast<float>(anchor_region->x) + static_cast<float>(anchor_region->w) * 0.5f - line_layout.width * 0.5f;
+    float line_left = static_cast<float>(anchor_region->x + side_padding);
+    const float usable_width_f = static_cast<float>(fitted.usable_width);
+    if (align_h == "center") {
+      line_left += std::max(usable_width_f - line_layout.width, 0.0f) * 0.5f;
+    } else if (align_h == "right") {
+      line_left += std::max(usable_width_f - line_layout.width, 0.0f);
+    }
     const int baseline_y = base_top + static_cast<int>(line_index) * line_height + ascender;
     float pen_x = line_left;
     for (const ShapedGlyph& glyph : line_layout.glyphs) {
@@ -694,35 +729,17 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
   if (min_x >= max_x || min_y >= max_y) {
     return overlay;
   }
-
-  const int safe_left = anchor_region->x + std::max(impl_->job.subtitle_margin / 2, 2);
-  const int safe_top = anchor_region->y + std::max(impl_->job.subtitle_margin / 2, 2);
-  const int safe_right = anchor_region->x + anchor_region->w - std::max(impl_->job.subtitle_margin / 2, 2);
-  const int safe_bottom = anchor_region->y + anchor_region->h - std::max(impl_->job.subtitle_margin / 2, 2);
-
-  int shift_x = 0;
-  int shift_y = 0;
-  if (min_x < safe_left) {
-    shift_x = safe_left - min_x;
-  } else if (max_x > safe_right) {
-    shift_x = safe_right - max_x;
-  }
-  if (min_y < safe_top) {
-    shift_y = safe_top - min_y;
-  } else if (max_y > safe_bottom) {
-    shift_y = safe_bottom - max_y;
-  }
-
-  if (shift_x != 0 || shift_y != 0) {
-    min_x += shift_x;
-    max_x += shift_x;
-    min_y += shift_y;
-    max_y += shift_y;
-    for (DrawGlyph& draw : draw_glyphs) {
-      draw.fill_x += shift_x;
-      draw.fill_y += shift_y;
-      draw.outline_x += shift_x;
-      draw.outline_y += shift_y;
+  const int clip_left = anchor_region->x + side_padding;
+  const int clip_top = anchor_region->y + top_padding;
+  const int clip_right = anchor_region->x + anchor_region->w - side_padding;
+  const int clip_bottom = anchor_region->y + anchor_region->h - top_padding;
+  if (impl_->job.subtitle_clip) {
+    min_x = std::max(min_x, clip_left);
+    min_y = std::max(min_y, clip_top);
+    max_x = std::min(max_x, clip_right);
+    max_y = std::min(max_y, clip_bottom);
+    if (min_x >= max_x || min_y >= max_y) {
+      return SubtitleOverlay{};
     }
   }
 
