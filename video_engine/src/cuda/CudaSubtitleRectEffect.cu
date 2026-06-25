@@ -90,7 +90,10 @@ __device__ float mixFloat(float a, float b, float amount) {
 }
 
 __device__ int computeBlurRadius(const DeviceRegion& region) {
-  return clampInt(static_cast<int>(2.0f + region.horizontal_blur * 14.0f + region.feather * 0.05f), 2, 12);
+  const float region_scale = fmaxf(static_cast<float>(region.h), static_cast<float>(region.w) * 0.18f);
+  const float base_radius = region_scale * (0.10f + region.horizontal_blur * 0.22f);
+  const float feather_boost = region.feather * 0.12f;
+  return clampInt(static_cast<int>(base_radius + feather_boost), 6, 48);
 }
 
 __device__ float gaussianWeight(int dx, int dy, float sigma_x, float sigma_y) {
@@ -145,8 +148,8 @@ __device__ float sampleGaussianLuma(
     float video_scale,
     bool flip_horizontal) {
   const int radius = computeBlurRadius(region);
-  const float sigma_x = fmaxf(1.1f, static_cast<float>(radius) * 0.85f);
-  const float sigma_y = fmaxf(1.1f, sigma_x * fmaxf(region.vertical_stretch, 0.85f));
+  const float sigma_x = fmaxf(2.4f, static_cast<float>(radius) * (0.75f + region.horizontal_blur * 0.55f));
+  const float sigma_y = fmaxf(2.0f, sigma_x * fmaxf(region.vertical_stretch, 0.95f));
   float accum = 0.0f;
   float total_weight = 0.0f;
   for (int dy = -radius; dy <= radius; ++dy) {
@@ -176,8 +179,8 @@ __device__ uchar2 sampleGaussianChroma(
   const int center_x = mapOutputToSourceCoord(x, width, video_scale, flip_horizontal, true) / 2;
   const int center_y = mapOutputToSourceCoord(y, height, video_scale, false, false) / 2;
   const int radius = clampInt((computeBlurRadius(region) + 1) / 2, 1, 8);
-  const float sigma_x = fmaxf(1.0f, static_cast<float>(radius) * 0.8f);
-  const float sigma_y = fmaxf(1.0f, sigma_x * fmaxf(region.vertical_stretch, 0.85f));
+  const float sigma_x = fmaxf(1.5f, static_cast<float>(radius) * (0.9f + region.horizontal_blur * 0.35f));
+  const float sigma_y = fmaxf(1.3f, sigma_x * fmaxf(region.vertical_stretch, 0.95f));
 
   float accum_u = 0.0f;
   float accum_v = 0.0f;
