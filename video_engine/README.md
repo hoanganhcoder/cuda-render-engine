@@ -219,6 +219,7 @@ Nested job layout:
 
 - `subtitle.srt` or `subtitle.text`: subtitle source
 - `subtitle.font` or `subtitle.font_ttf`: system font name or explicit `.ttf`
+- when using `subtitle.font_ttf`, that file is treated as the exact face; for best results provide the matching bold/italic face instead of relying on synthetic styles
 - `video_scale`: zoom from center, `1.0` means no zoom, `1.2` means zoom in 20%
 - `flip_horizontal`: mirror the whole video left-to-right
 - `subtitle.size`, `watermark.size`: `%` of video height, not pixels
@@ -237,6 +238,7 @@ Nested job layout:
 - `subtitle.regions`: list of blur regions with `x/y/w/h/start/end/...`
 - `watermark.text`: transparent text watermark
 - `watermark.font` or `watermark.font_ttf`: system font name or explicit `.ttf`
+- when using `watermark.font_ttf`, that file is treated as the exact face; for best results provide the matching bold/italic face instead of relying on synthetic styles
 - `watermark.color`, `watermark.outline_color`, `watermark.opacity`
 - `watermark.bounce`, `watermark.speed_x`, `watermark.speed_y`
 - `logo.path`: optional logo image path

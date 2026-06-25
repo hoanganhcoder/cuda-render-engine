@@ -367,6 +367,8 @@ struct TextBoxRenderer::Impl {
   FT_Library ft_library = nullptr;
   FT_Face ft_face = nullptr;
   hb_font_t* hb_font = nullptr;
+  bool apply_synthetic_bold = false;
+  bool apply_synthetic_italic = false;
   mutable std::unordered_map<GlyphCacheKey, GlyphCacheValue, GlyphCacheKeyHasher> glyph_cache;
   mutable std::unordered_map<std::string, LineLayout> line_cache;
   mutable std::unordered_map<OverlayCacheKey, SubtitleOverlay, OverlayCacheKeyHasher> overlay_cache;
@@ -437,6 +439,11 @@ void TextBoxRenderer::initialize(const RenderJob& job, int video_width, int vide
   if (FT_New_Face(impl_->ft_library, job.subtitle_font_path.c_str(), 0, &impl_->ft_face) != 0) {
     return;
   }
+  const bool face_is_bold = (impl_->ft_face->style_flags & FT_STYLE_FLAG_BOLD) != 0;
+  const bool face_is_italic = (impl_->ft_face->style_flags & FT_STYLE_FLAG_ITALIC) != 0;
+  const bool explicit_face_file = !job.subtitle_font_path.empty();
+  impl_->apply_synthetic_bold = job.subtitle_bold && !face_is_bold && !explicit_face_file;
+  impl_->apply_synthetic_italic = job.subtitle_italic && !face_is_italic && !explicit_face_file;
   FT_Set_Pixel_Sizes(impl_->ft_face, 0, static_cast<FT_UInt>(impl_->font_pixels));
   impl_->hb_font = hb_ft_font_create_referenced(impl_->ft_face);
   if (impl_->hb_font == nullptr) {
@@ -509,8 +516,8 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     auto get_line_layout = [&](const std::string& line_text) -> const LineLayout& {
       const std::string cache_id =
           line_text + "|" + std::to_string(dynamic_usable_width) + "|" + std::to_string(font_pixels) + "|" +
-          std::to_string(impl_->job.subtitle_outline) + "|" + std::to_string(impl_->job.subtitle_bold) + "|" +
-          std::to_string(impl_->job.subtitle_italic);
+          std::to_string(impl_->job.subtitle_outline) + "|" + std::to_string(impl_->apply_synthetic_bold) + "|" +
+          std::to_string(impl_->apply_synthetic_italic);
       auto found = impl_->line_cache.find(cache_id);
       if (found != impl_->line_cache.end()) {
         return found->second;
@@ -518,9 +525,9 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
       hb_buffer_t* buffer = hb_buffer_create();
       hb_buffer_add_utf8(buffer, line_text.c_str(), static_cast<int>(line_text.size()), 0, static_cast<int>(line_text.size()));
-      hb_buffer_set_direction(buffer, HB_DIRECTION_LTR);
-      hb_buffer_set_script(buffer, HB_SCRIPT_LATIN);
+      hb_buffer_set_cluster_level(buffer, HB_BUFFER_CLUSTER_LEVEL_MONOTONE_GRAPHEMES);
       hb_buffer_set_language(buffer, hb_language_from_string("vi", -1));
+      hb_buffer_guess_segment_properties(buffer);
       hb_shape(impl_->hb_font, buffer, nullptr, 0);
 
       unsigned int glyph_count = 0;
@@ -559,7 +566,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
       for (const std::string& code_point : utf8CodePointChunks(word)) {
         const std::string candidate = current_segment + code_point;
         const LineLayout& candidate_layout = get_line_layout(candidate);
-        if (!current_segment.empty() && candidate_layout.width > static_cast<float>(dynamic_usable_width)) {
+        if (!current_segment.empty() && candidate_layout.advance_width > static_cast<float>(dynamic_usable_width)) {
           segments.push_back(current_segment);
           current_segment = code_point;
         } else {
@@ -588,7 +595,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
         std::string word;
         std::string current;
         while (words >> word) {
-          if (current.empty() && get_line_layout(word).width > static_cast<float>(dynamic_usable_width)) {
+          if (current.empty() && get_line_layout(word).advance_width > static_cast<float>(dynamic_usable_width)) {
             const std::vector<std::string> segments = split_word_to_fit(word);
             for (size_t segment_index = 0; segment_index < segments.size(); ++segment_index) {
               const std::string& segment = segments[segment_index];
@@ -602,9 +609,9 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
           }
           const std::string candidate = current.empty() ? word : current + " " + word;
           const LineLayout& candidate_layout = get_line_layout(candidate);
-          if (!current.empty() && candidate_layout.width > static_cast<float>(dynamic_usable_width)) {
+          if (!current.empty() && candidate_layout.advance_width > static_cast<float>(dynamic_usable_width)) {
             lines.push_back(current);
-            if (get_line_layout(word).width > static_cast<float>(dynamic_usable_width)) {
+            if (get_line_layout(word).advance_width > static_cast<float>(dynamic_usable_width)) {
               const std::vector<std::string> segments = split_word_to_fit(word);
               for (size_t segment_index = 0; segment_index < segments.size(); ++segment_index) {
                 const std::string& segment = segments[segment_index];
@@ -639,7 +646,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     const int dynamic_usable_height = std::max(1, anchor_region->h - dynamic_top_padding * 2);
     float max_line_width = 0.0f;
     for (const std::string& line : lines) {
-      max_line_width = std::max(max_line_width, get_line_layout(line).width);
+      max_line_width = std::max(max_line_width, get_line_layout(line).advance_width);
     }
     return FittedLayout{
         font_pixels,
@@ -673,8 +680,8 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
   const auto get_line_layout = [&](const std::string& line_text) -> const LineLayout& {
     const std::string cache_id =
         line_text + "|" + std::to_string(fitted.usable_width) + "|" + std::to_string(fitted.font_pixels) + "|" +
-        std::to_string(impl_->job.subtitle_outline) + "|" + std::to_string(impl_->job.subtitle_bold) + "|" +
-        std::to_string(impl_->job.subtitle_italic);
+        std::to_string(impl_->job.subtitle_outline) + "|" + std::to_string(impl_->apply_synthetic_bold) + "|" +
+        std::to_string(impl_->apply_synthetic_italic);
     return impl_->line_cache.at(cache_id);
   };
 
@@ -714,18 +721,18 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
         glyph_index,
         fitted.font_pixels,
         impl_->job.subtitle_outline,
-        impl_->job.subtitle_bold,
-        impl_->job.subtitle_italic};
+        impl_->apply_synthetic_bold,
+        impl_->apply_synthetic_italic};
     auto found = impl_->glyph_cache.find(key);
     if (found != impl_->glyph_cache.end()) {
       return found->second;
     }
 
     FT_Load_Glyph(impl_->ft_face, glyph_index, FT_LOAD_DEFAULT);
-    if (impl_->job.subtitle_bold) {
+    if (impl_->apply_synthetic_bold) {
       FT_GlyphSlot_Embolden(impl_->ft_face->glyph);
     }
-    if (impl_->job.subtitle_italic) {
+    if (impl_->apply_synthetic_italic) {
       FT_GlyphSlot_Oblique(impl_->ft_face->glyph);
     }
 
@@ -743,10 +750,10 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
     if (impl_->job.subtitle_outline > 0) {
       FT_Load_Glyph(impl_->ft_face, glyph_index, FT_LOAD_DEFAULT);
-      if (impl_->job.subtitle_bold) {
+      if (impl_->apply_synthetic_bold) {
         FT_GlyphSlot_Embolden(impl_->ft_face->glyph);
       }
-      if (impl_->job.subtitle_italic) {
+      if (impl_->apply_synthetic_italic) {
         FT_GlyphSlot_Oblique(impl_->ft_face->glyph);
       }
       FT_Glyph outline_glyph = nullptr;
@@ -780,9 +787,9 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     float line_left = static_cast<float>(anchor_region->x + side_padding);
     const float usable_width_f = static_cast<float>(fitted.usable_width);
     if (align_h == "center") {
-      line_left += std::max(usable_width_f - line_layout.width, 0.0f) * 0.5f;
+      line_left += std::max(usable_width_f - line_layout.advance_width, 0.0f) * 0.5f;
     } else if (align_h == "right") {
-      line_left += std::max(usable_width_f - line_layout.width, 0.0f);
+      line_left += std::max(usable_width_f - line_layout.advance_width, 0.0f);
     }
     const int baseline_y = base_top + static_cast<int>(line_index) * line_height + ascender;
     float pen_x = line_left;
