@@ -45,8 +45,6 @@ __device__ float clamp01(float value) {
   return fminf(1.0f, fmaxf(0.0f, value));
 }
 
-__device__ int computeBlurRadius(const DeviceRegion& region);
-
 __device__ int clampInt(int value, int low, int high) {
   return max(low, min(high, value));
 }
@@ -86,22 +84,6 @@ __device__ float edgeMask(const DeviceRegion& region, int x, int y) {
   return 1.0f - (t * t * (3.0f - 2.0f * t));
 }
 
-__device__ bool isInsideExpandedRegion(const DeviceRegion& region, int x, int y) {
-  const int expand_x = max(2, static_cast<int>(region.feather) + computeBlurRadius(region) * 2);
-  const int expand_y = max(2, static_cast<int>(region.feather * 0.5f) + max(1, computeBlurRadius(region) / 2));
-  return x >= region.x - expand_x && x < region.x + region.w + expand_x && y >= region.y - expand_y &&
-         y < region.y + region.h + expand_y;
-}
-
-__device__ bool isAffectedByAnyRegion(int x, int y, int region_count) {
-  for (int i = 0; i < region_count; ++i) {
-    if (isInsideExpandedRegion(kDeviceRegions[i], x, y)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 __device__ float normalizeByte(uint8_t value) {
   return static_cast<float>(value) / 255.0f;
 }
@@ -121,13 +103,6 @@ __device__ int mapOutputToSourceCoord(int coord, int size, float video_scale, bo
     mapped = static_cast<float>(size - 1) - mapped;
   }
   return clampInt(static_cast<int>(mapped + 0.5f), 0, size - 1);
-}
-
-__device__ int computeBlurRadius(const DeviceRegion& region) {
-  const float region_scale = fmaxf(static_cast<float>(region.h), static_cast<float>(region.w) * 0.15f);
-  const float base_radius = region_scale * (0.03f + region.horizontal_blur * 0.045f);
-  const float feather_boost = region.feather * 0.015f;
-  return clampInt(static_cast<int>(base_radius + feather_boost), 3, 8);
 }
 
 __device__ float gaussianWeight1D(int offset, float sigma) {
@@ -273,9 +248,6 @@ __global__ void gaussianHorizontalChromaKernel(
   }
   const int x = origin_x + local_x;
   const int y = origin_y + local_y;
-
-  const int full_x = x * 2;
-  const int full_y = y * 2;
 
   float accum_u = 0.0f;
   float accum_v = 0.0f;
