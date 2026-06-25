@@ -89,18 +89,20 @@ __device__ float mixFloat(float a, float b, float amount) {
   return a + (b - a) * amount;
 }
 
+__device__ int mapOutputToSourceCoord(int coord, int size, float video_scale, bool flip_horizontal, bool is_x) {
+  const float center = (static_cast<float>(size) - 1.0f) * 0.5f;
+  float mapped = center + (static_cast<float>(coord) - center) / fmaxf(video_scale, 1.0f);
+  if (is_x && flip_horizontal) {
+    mapped = static_cast<float>(size - 1) - mapped;
+  }
+  return clampInt(static_cast<int>(mapped + 0.5f), 0, size - 1);
+}
+
 __device__ int computeBlurRadius(const DeviceRegion& region) {
   const float region_scale = fmaxf(static_cast<float>(region.h), static_cast<float>(region.w) * 0.18f);
   const float base_radius = region_scale * (0.045f + region.horizontal_blur * 0.08f);
   const float feather_boost = region.feather * 0.03f;
   return clampInt(static_cast<int>(base_radius + feather_boost), 4, 12);
-}
-
-__device__ float gaussianWeight(int dx, int dy, float sigma_x, float sigma_y) {
-  const float fx = static_cast<float>(dx);
-  const float fy = static_cast<float>(dy);
-  const float exponent = -0.5f * ((fx * fx) / (sigma_x * sigma_x) + (fy * fy) / (sigma_y * sigma_y));
-  return __expf(exponent);
 }
 
 template <size_t N>
@@ -126,15 +128,6 @@ __device__ float sampleSparseLumaBlur(
     total_weight += weight;
   }
   return accum / fmaxf(total_weight, 1.0f);
-}
-
-__device__ int mapOutputToSourceCoord(int coord, int size, float video_scale, bool flip_horizontal, bool is_x) {
-  const float center = (static_cast<float>(size) - 1.0f) * 0.5f;
-  float mapped = center + (static_cast<float>(coord) - center) / fmaxf(video_scale, 1.0f);
-  if (is_x && flip_horizontal) {
-    mapped = static_cast<float>(size - 1) - mapped;
-  }
-  return clampInt(static_cast<int>(mapped + 0.5f), 0, size - 1);
 }
 
 __device__ float sampleOverlayAlpha(const DeviceSubtitleOverlay& overlay, int x, int y) {
