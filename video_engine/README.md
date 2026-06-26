@@ -41,8 +41,11 @@ sudo apt-get install -y \
   libavcodec-dev \
   libavutil-dev \
   libswscale-dev \
+  libcairo2-dev \
+  libfontconfig1-dev \
   libfreetype6-dev \
   libharfbuzz-dev \
+  libpango1.0-dev \
   python3-dev \
   python3-pip \
   nvidia-cuda-toolkit
@@ -79,8 +82,6 @@ Text rendering backends:
 
 - preferred subtitle text-box path on Linux/Colab: `Pango + Cairo + Fontconfig`
 - fallback text-box path: `FreeType + HarfBuzz` (`TextBoxRenderer`)
-- fallback subtitle path: `libass`
-- final fallback: built-in bitmap renderer
 `CMakeLists.txt` prefers that local tree before falling back to `pkg-config`.
 
 Run:
@@ -143,7 +144,7 @@ This produces a wheel in `video_engine/dist/` that bundles:
 Install on another Colab session:
 
 ```bash
-pip install /path/to/video_engine/dist/video_engine-0.1.2-*.whl
+pip install /path/to/video_engine/dist/video_engine-0.1.4-*.whl
 ```
 
 Then use it directly:
@@ -249,8 +250,6 @@ Subtitle rendering path:
 
 - preferred subtitle text-box path on Linux/Colab: `Pango + Cairo + Fontconfig` for mature layout/shaping of script/display fonts
 - fallback text-box path: `TextBoxRenderer (FreeType + HarfBuzz)` for region-based layout and explicit line breaking
-- fallback subtitle path: `libass`
-- final fallback path: built-in bitmap renderer
 
 Editor-style model:
 

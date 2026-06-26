@@ -52,15 +52,10 @@ endif()
 
 add_library(video_engine_subtitle INTERFACE)
 if(PkgConfig_FOUND)
-  pkg_check_modules(LIBASS QUIET IMPORTED_TARGET libass)
   pkg_check_modules(HARFBUZZ QUIET IMPORTED_TARGET harfbuzz)
   pkg_check_modules(FONTCONFIG QUIET IMPORTED_TARGET fontconfig)
   pkg_check_modules(CAIRO QUIET IMPORTED_TARGET cairo)
   pkg_check_modules(PANGO QUIET IMPORTED_TARGET pangocairo)
-endif()
-if(TARGET PkgConfig::LIBASS)
-  target_link_libraries(video_engine_subtitle INTERFACE PkgConfig::LIBASS)
-  target_compile_definitions(video_engine_subtitle INTERFACE VIDEO_ENGINE_HAS_LIBASS=1)
 endif()
 if(TARGET PkgConfig::HARFBUZZ)
   target_compile_definitions(video_engine_subtitle INTERFACE VIDEO_ENGINE_HAS_HARFBUZZ=1)
@@ -81,7 +76,6 @@ endif()
 
 set(VIDEO_ENGINE_SOURCES
   src/bindings/py_module.cpp
-  src/core/AssSubtitleRenderer.cpp
   src/core/BlurBoxEffect.cpp
   src/core/Logger.cpp
   src/core/OverlayLayerRenderer.cpp
@@ -89,7 +83,6 @@ set(VIDEO_ENGINE_SOURCES
   src/core/RenderJob.cpp
   src/core/SrtParser.cpp
   src/core/SubtitleLayerRenderer.cpp
-  src/core/SubtitleRenderer.cpp
   src/core/TextBoxRenderer.cpp
   src/core/timeline/RenderJobAdapter.cpp
   src/codec/FFmpegDecoder.cpp

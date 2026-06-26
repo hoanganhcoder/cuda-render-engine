@@ -1,6 +1,7 @@
 #include "core/RenderEngine.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <sstream>
 #include <stdexcept>
@@ -219,6 +220,8 @@ bool RenderEngine::render(const RenderJob& input_job) {
     }
 
     Logger::info("Render started.");
+    const auto render_start_time = std::chrono::steady_clock::now();
+    auto previous_log_time = render_start_time;
     int frame_index = 0;
     while (decoder.read(decoded_frame, timestamp_seconds)) {
       if (decoded_frame->width != job.width || decoded_frame->height != job.height) {
@@ -291,8 +294,16 @@ bool RenderEngine::render(const RenderJob& input_job) {
 
       ++frame_index;
       if (frame_index % kLogFrameInterval == 0) {
+        const auto now = std::chrono::steady_clock::now();
+        const double total_elapsed =
+            std::chrono::duration_cast<std::chrono::duration<double>>(now - render_start_time).count();
+        const double interval_elapsed =
+            std::chrono::duration_cast<std::chrono::duration<double>>(now - previous_log_time).count();
+        previous_log_time = now;
         std::ostringstream stream;
-        stream << "Rendered " << frame_index << " GPU frames at t=" << timestamp_seconds << "s";
+        stream << "Rendered " << frame_index << " GPU frames at t=" << timestamp_seconds << "s"
+               << " interval_fps=" << (interval_elapsed > 0.0 ? static_cast<double>(kLogFrameInterval) / interval_elapsed : 0.0)
+               << " avg_fps=" << (total_elapsed > 0.0 ? static_cast<double>(frame_index) / total_elapsed : 0.0);
         Logger::info(stream.str());
       }
     }

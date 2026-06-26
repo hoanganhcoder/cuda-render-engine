@@ -22,7 +22,6 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   pkg-config \
   yasm \
   nasm \
-  libass-dev \
   libcairo2-dev \
   libfontconfig1-dev \
   libfreetype6-dev \

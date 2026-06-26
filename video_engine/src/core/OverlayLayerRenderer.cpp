@@ -8,8 +8,6 @@
 #include <utility>
 #include <vector>
 
-#include "core/SubtitleRenderer.h"
-
 extern "C" {
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
@@ -315,7 +313,6 @@ void OverlayLayerRenderer::initialize(const RenderJob& job, int video_width, int
 
   if (impl_->text_enabled) {
     text_renderer_.initialize(impl_->text_job, video_width, video_height);
-    ass_text_renderer_.initialize(impl_->text_job, video_width, video_height);
   }
 
   if (impl_->logo_enabled) {
@@ -364,17 +361,6 @@ std::vector<SubtitleOverlay> OverlayLayerRenderer::render(double timestamp_secon
     SubtitleOverlay text_overlay;
     if (text_renderer_.available()) {
       text_overlay = text_renderer_.render(timestamp_seconds, &text_region);
-    } else if (ass_text_renderer_.available()) {
-      text_overlay = ass_text_renderer_.render(timestamp_seconds, &text_region);
-    } else {
-      text_overlay = SubtitleRenderer::buildOverlay(
-          text_region,
-          impl_->source_job.watermark_text,
-          impl_->video_width,
-          impl_->video_height,
-          std::max(1, watermark_font_pixels / 10),
-          std::max(impl_->source_job.watermark_margin / 2, 0),
-          impl_->source_job.watermark_opacity);
     }
     if (text_overlay.enabled) {
       const auto [actual_x, actual_y] = computeMotionPosition(

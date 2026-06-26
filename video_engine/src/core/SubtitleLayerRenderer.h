@@ -2,7 +2,6 @@
 
 #include <memory>
 
-#include "core/AssSubtitleRenderer.h"
 #include "core/LayerRenderer.h"
 #include "core/TextBoxRenderer.h"
 
@@ -24,7 +23,6 @@ private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
   TextBoxRenderer text_box_renderer_;
-  AssSubtitleRenderer ass_subtitle_renderer_;
 };
 
 }  // namespace video_engine
