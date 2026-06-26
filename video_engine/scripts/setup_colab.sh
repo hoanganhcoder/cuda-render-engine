@@ -11,6 +11,7 @@ NVCODEC_HEADERS_TAG="${NVCODEC_HEADERS_TAG:-n13.0.19.0}"
 FFMPEG_GIT_TAG="${FFMPEG_GIT_TAG:-n6.1.2}"
 FFMPEG_PREFIX="$FFMPEG_STAGE_DIR"
 NPROC_VALUE="${NPROC_VALUE:-$(nproc)}"
+CUDA_ARCHITECTURES="${CUDA_ARCHITECTURES:-}"
 
 echo "[1/7] Repo root: $REPO_ROOT"
 echo "[2/7] Installing system dependencies"
@@ -49,6 +50,13 @@ if ! command -v nvidia-smi >/dev/null 2>&1; then
   exit 1
 fi
 nvidia-smi || true
+if [[ -z "$CUDA_ARCHITECTURES" ]]; then
+  CUDA_ARCHITECTURES="$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -n 1 | tr -d ' .')"
+fi
+if [[ -z "$CUDA_ARCHITECTURES" ]]; then
+  CUDA_ARCHITECTURES="75"
+fi
+echo "CUDA architectures: $CUDA_ARCHITECTURES"
 
 if ! command -v nvcc >/dev/null 2>&1; then
   echo "nvcc not found; CUDA toolkit is required for the zero-copy build." >&2
@@ -92,6 +100,7 @@ echo "[6/7] Configuring and building video_engine"
 rm -rf "$BUILD_DIR"
 cmake -S "$REPO_ROOT" -B "$BUILD_DIR" -G Ninja \
   -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_CUDA_ARCHITECTURES="$CUDA_ARCHITECTURES" \
   -Dpybind11_DIR="$PYBIND11_DIR"
 cmake --build "$BUILD_DIR" -j"$NPROC_VALUE"
 
