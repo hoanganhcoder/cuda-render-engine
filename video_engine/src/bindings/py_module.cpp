@@ -2,18 +2,41 @@
 #include <pybind11/iostream.h>
 
 #include <iostream>
+#include <utility>
 
+#include "core/Logger.h"
 #include "core/RenderEngine.h"
 
 namespace py = pybind11;
 
 namespace video_engine {
 
-constexpr const char* kVersion = "0.1.6";
+constexpr const char* kVersion = "0.1.7";
+
+class ScopedPythonLogSink {
+public:
+  ScopedPythonLogSink() {
+    previous_sink_ = Logger::setSink([](const std::string& line) {
+      py::gil_scoped_acquire acquire;
+      py::print(line, py::arg("flush") = true);
+    });
+  }
+
+  ~ScopedPythonLogSink() {
+    Logger::setSink(std::move(previous_sink_));
+  }
+
+  ScopedPythonLogSink(const ScopedPythonLogSink&) = delete;
+  ScopedPythonLogSink& operator=(const ScopedPythonLogSink&) = delete;
+
+private:
+  Logger::Sink previous_sink_;
+};
 
 bool renderFromPython(const py::dict& job_dict) {
   RenderJob job = RenderJob::fromPythonDict(job_dict);
   RenderEngine engine;
+  ScopedPythonLogSink python_log_sink;
   py::scoped_ostream_redirect stdout_redirect(
       std::cout,
       py::module_::import("sys").attr("stdout"));
