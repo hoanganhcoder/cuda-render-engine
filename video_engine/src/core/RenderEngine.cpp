@@ -148,6 +148,24 @@ SubtitleOverlay combineOverlays(const std::vector<SubtitleOverlay>& overlays, in
   return canvas;
 }
 
+bool needsPreviousFrameHistory(const std::vector<Region>& regions) {
+  for (const Region& region : regions) {
+    if (region.temporal_blend > 0.0f) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool sameUploadedOverlay(const SubtitleOverlay& previous, const SubtitleOverlay& current) {
+  return previous.enabled == current.enabled && previous.x == current.x && previous.y == current.y &&
+         previous.width == current.width && previous.height == current.height && previous.stride == current.stride &&
+         previous.opacity == current.opacity && previous.cue_text == current.cue_text &&
+         previous.alpha_mask.size() == current.alpha_mask.size() && previous.luma_mask.size() == current.luma_mask.size() &&
+         previous.chroma_u_mask.size() == current.chroma_u_mask.size() &&
+         previous.chroma_v_mask.size() == current.chroma_v_mask.size();
+}
+
 }  // namespace
 
 RenderEngine::RenderEngine() {
@@ -165,6 +183,8 @@ bool RenderEngine::render(const RenderJob& input_job) {
     AVFrame* decoded_frame = nullptr;
     double timestamp_seconds = 0.0;
     SubtitleOverlay current_overlay;
+    SubtitleOverlay uploaded_overlay;
+    bool has_uploaded_overlay = false;
 
     decoder.open(job.input);
     if (job.width <= 0) {
@@ -183,6 +203,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
     for (Region& region : job.regions) {
       region.clampToBounds(job.width, job.height);
     }
+    const bool use_previous_frame_history = needsPreviousFrameHistory(job.regions);
     blur_box_effect_.initialize(sequence_input);
     current_job_ = job;
     current_video_width_ = job.width;
@@ -212,22 +233,28 @@ bool RenderEngine::render(const RenderJob& input_job) {
 
       if (!output_frame) {
         output_frame = allocateHardwareFrame(decoded_frame->hw_frames_ctx, job.width, job.height);
-        previous_frame = allocateHardwareFrame(decoded_frame->hw_frames_ctx, job.width, job.height);
+        if (use_previous_frame_history) {
+          previous_frame = allocateHardwareFrame(decoded_frame->hw_frames_ctx, job.width, job.height);
+        }
         encoder.open(job.output, job.width, job.height, job.fps, decoder.hwDeviceContext(), decoded_frame->hw_frames_ctx);
       }
 
       const std::vector<Region> active_blur_regions = blur_box_effect_.collectActiveRegions(timestamp_seconds);
       current_overlay = buildCompositeOverlay(timestamp_seconds);
-      if (current_overlay.enabled) {
-        subtitle_mask_buffer_.upload(current_overlay.alpha_mask, cuda_context_.stream());
-        subtitle_luma_buffer_.upload(current_overlay.luma_mask, cuda_context_.stream());
-        subtitle_chroma_u_buffer_.upload(current_overlay.chroma_u_mask, cuda_context_.stream());
-        subtitle_chroma_v_buffer_.upload(current_overlay.chroma_v_mask, cuda_context_.stream());
-      } else {
-        subtitle_mask_buffer_.release();
-        subtitle_luma_buffer_.release();
-        subtitle_chroma_u_buffer_.release();
-        subtitle_chroma_v_buffer_.release();
+      if (!has_uploaded_overlay || !sameUploadedOverlay(uploaded_overlay, current_overlay)) {
+        if (current_overlay.enabled) {
+          subtitle_mask_buffer_.upload(current_overlay.alpha_mask, cuda_context_.stream());
+          subtitle_luma_buffer_.upload(current_overlay.luma_mask, cuda_context_.stream());
+          subtitle_chroma_u_buffer_.upload(current_overlay.chroma_u_mask, cuda_context_.stream());
+          subtitle_chroma_v_buffer_.upload(current_overlay.chroma_v_mask, cuda_context_.stream());
+        } else {
+          subtitle_mask_buffer_.release();
+          subtitle_luma_buffer_.release();
+          subtitle_chroma_u_buffer_.release();
+          subtitle_chroma_v_buffer_.release();
+        }
+        uploaded_overlay = current_overlay;
+        has_uploaded_overlay = true;
       }
 
       DeviceSubtitleOverlay device_overlay{};
@@ -247,7 +274,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
 
       blur_box_effect_.apply(
           decoded_frame,
-          frame_index > 0 ? previous_frame : nullptr,
+          use_previous_frame_history && frame_index > 0 ? previous_frame : nullptr,
           output_frame,
           active_blur_regions,
           job.video_scale,
@@ -258,7 +285,9 @@ bool RenderEngine::render(const RenderJob& input_job) {
       output_frame->width = job.width;
       output_frame->height = job.height;
       encoder.write(output_frame);
-      cloneFrameTo(previous_frame, output_frame);
+      if (use_previous_frame_history) {
+        cloneFrameTo(previous_frame, output_frame);
+      }
 
       ++frame_index;
       if (frame_index % kLogFrameInterval == 0) {
