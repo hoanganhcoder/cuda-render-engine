@@ -9,7 +9,7 @@ namespace py = pybind11;
 
 namespace video_engine {
 
-constexpr const char* kVersion = "0.1.5";
+constexpr const char* kVersion = "0.1.6";
 
 bool renderFromPython(const py::dict& job_dict) {
   RenderJob job = RenderJob::fromPythonDict(job_dict);

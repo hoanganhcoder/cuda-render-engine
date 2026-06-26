@@ -781,6 +781,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     g_object_unref(font_map);
     cairo_destroy(cr);
     cairo_surface_destroy(surface);
+    impl_->overlay_cache.emplace(cache_key, overlay);
     return overlay;
   }
 #endif
