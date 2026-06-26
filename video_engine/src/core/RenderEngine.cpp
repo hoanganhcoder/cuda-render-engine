@@ -16,6 +16,24 @@ namespace video_engine {
 
 namespace {
 
+struct RenderStageTimers {
+  double overlay_seconds = 0.0;
+  double upload_seconds = 0.0;
+  double effect_seconds = 0.0;
+  double encode_seconds = 0.0;
+
+  void reset() {
+    overlay_seconds = 0.0;
+    upload_seconds = 0.0;
+    effect_seconds = 0.0;
+    encode_seconds = 0.0;
+  }
+};
+
+double elapsedSecondsSince(std::chrono::steady_clock::time_point start) {
+  return std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start).count();
+}
+
 SubtitleOverlay makeCanvasOverlay(int x, int y, int width, int height) {
   SubtitleOverlay overlay;
   overlay.enabled = width > 0 && height > 0;
@@ -222,6 +240,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
     Logger::info("Render started.");
     const auto render_start_time = std::chrono::steady_clock::now();
     auto previous_log_time = render_start_time;
+    RenderStageTimers interval_timers;
     int frame_index = 0;
     while (decoder.read(decoded_frame, timestamp_seconds)) {
       if (decoded_frame->width != job.width || decoded_frame->height != job.height) {
@@ -243,8 +262,11 @@ bool RenderEngine::render(const RenderJob& input_job) {
       }
 
       const std::vector<Region> active_blur_regions = blur_box_effect_.collectActiveRegions(timestamp_seconds);
+      const auto overlay_start_time = std::chrono::steady_clock::now();
       current_overlay = buildCompositeOverlay(timestamp_seconds);
+      interval_timers.overlay_seconds += elapsedSecondsSince(overlay_start_time);
       if (!has_uploaded_overlay || !sameUploadedOverlay(uploaded_overlay, current_overlay)) {
+        const auto upload_start_time = std::chrono::steady_clock::now();
         if (current_overlay.enabled) {
           subtitle_mask_buffer_.upload(current_overlay.alpha_mask, cuda_context_.stream());
           subtitle_luma_buffer_.upload(current_overlay.luma_mask, cuda_context_.stream());
@@ -258,6 +280,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
         }
         uploaded_overlay = current_overlay;
         has_uploaded_overlay = true;
+        interval_timers.upload_seconds += elapsedSecondsSince(upload_start_time);
       }
 
       DeviceSubtitleOverlay device_overlay{};
@@ -275,6 +298,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
         device_overlay.opacity = current_overlay.opacity;
       }
 
+      const auto effect_start_time = std::chrono::steady_clock::now();
       blur_box_effect_.apply(
           decoded_frame,
           use_previous_frame_history && frame_index > 0 ? previous_frame : nullptr,
@@ -284,10 +308,13 @@ bool RenderEngine::render(const RenderJob& input_job) {
           job.flip_horizontal,
           device_overlay,
           cuda_context_.stream());
+      interval_timers.effect_seconds += elapsedSecondsSince(effect_start_time);
       output_frame->format = AV_PIX_FMT_CUDA;
       output_frame->width = job.width;
       output_frame->height = job.height;
+      const auto encode_start_time = std::chrono::steady_clock::now();
       encoder.write(output_frame);
+      interval_timers.encode_seconds += elapsedSecondsSince(encode_start_time);
       if (use_previous_frame_history) {
         cloneFrameTo(previous_frame, output_frame);
       }
@@ -303,8 +330,13 @@ bool RenderEngine::render(const RenderJob& input_job) {
         std::ostringstream stream;
         stream << "Rendered " << frame_index << " GPU frames at t=" << timestamp_seconds << "s"
                << " interval_fps=" << (interval_elapsed > 0.0 ? static_cast<double>(kLogFrameInterval) / interval_elapsed : 0.0)
-               << " avg_fps=" << (total_elapsed > 0.0 ? static_cast<double>(frame_index) / total_elapsed : 0.0);
+               << " avg_fps=" << (total_elapsed > 0.0 ? static_cast<double>(frame_index) / total_elapsed : 0.0)
+               << " stage_ms={text:" << (interval_timers.overlay_seconds * 1000.0)
+               << ",upload:" << (interval_timers.upload_seconds * 1000.0)
+               << ",effect:" << (interval_timers.effect_seconds * 1000.0)
+               << ",encode:" << (interval_timers.encode_seconds * 1000.0) << "}";
         Logger::info(stream.str());
+        interval_timers.reset();
       }
     }
 
