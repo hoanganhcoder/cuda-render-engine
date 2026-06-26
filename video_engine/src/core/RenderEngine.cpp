@@ -15,11 +15,11 @@ namespace video_engine {
 
 namespace {
 
-SubtitleOverlay makeCanvasOverlay(int width, int height) {
+SubtitleOverlay makeCanvasOverlay(int x, int y, int width, int height) {
   SubtitleOverlay overlay;
   overlay.enabled = width > 0 && height > 0;
-  overlay.x = 0;
-  overlay.y = 0;
+  overlay.x = x;
+  overlay.y = y;
   overlay.width = width;
   overlay.height = height;
   overlay.stride = width;
@@ -77,12 +77,12 @@ void blitOverlay(SubtitleOverlay& destination, const SubtitleOverlay& source) {
   const float opacity = std::clamp(source.opacity, 0.0f, 1.0f);
   for (int y = 0; y < source.height; ++y) {
     const int dst_y = source.y + y;
-    if (dst_y < 0 || dst_y >= destination.height) {
+    if (dst_y < destination.y || dst_y >= destination.y + destination.height) {
       continue;
     }
     for (int x = 0; x < source.width; ++x) {
       const int dst_x = source.x + x;
-      if (dst_x < 0 || dst_x >= destination.width) {
+      if (dst_x < destination.x || dst_x >= destination.x + destination.width) {
         continue;
       }
 
@@ -92,8 +92,14 @@ void blitOverlay(SubtitleOverlay& destination, const SubtitleOverlay& source) {
         continue;
       }
 
+      const int local_dst_x = dst_x - destination.x;
+      const int local_dst_y = dst_y - destination.y;
+      if (local_dst_x < 0 || local_dst_y < 0 || local_dst_x >= destination.width ||
+          local_dst_y >= destination.height) {
+        continue;
+      }
       const size_t dst_index =
-          static_cast<size_t>(dst_y) * static_cast<size_t>(destination.stride) + static_cast<size_t>(dst_x);
+          static_cast<size_t>(local_dst_y) * static_cast<size_t>(destination.stride) + static_cast<size_t>(local_dst_x);
       blendOverlayPixel(
           destination,
           dst_index,
@@ -121,7 +127,21 @@ SubtitleOverlay combineOverlays(const std::vector<SubtitleOverlay>& overlays, in
     return *enabled_overlays.front();
   }
 
-  SubtitleOverlay canvas = makeCanvasOverlay(width, height);
+  int min_x = width;
+  int min_y = height;
+  int max_x = 0;
+  int max_y = 0;
+  for (const SubtitleOverlay* overlay : enabled_overlays) {
+    min_x = std::min(min_x, std::clamp(overlay->x, 0, width));
+    min_y = std::min(min_y, std::clamp(overlay->y, 0, height));
+    max_x = std::max(max_x, std::clamp(overlay->x + overlay->width, 0, width));
+    max_y = std::max(max_y, std::clamp(overlay->y + overlay->height, 0, height));
+  }
+  if (max_x <= min_x || max_y <= min_y) {
+    return SubtitleOverlay{};
+  }
+
+  SubtitleOverlay canvas = makeCanvasOverlay(min_x, min_y, max_x - min_x, max_y - min_y);
   for (const SubtitleOverlay* overlay : enabled_overlays) {
     blitOverlay(canvas, *overlay);
   }

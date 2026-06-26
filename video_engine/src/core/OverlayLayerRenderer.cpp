@@ -356,18 +356,11 @@ std::vector<SubtitleOverlay> OverlayLayerRenderer::render(double timestamp_secon
     const int watermark_font_pixels = impl_->source_job.resolveWatermarkFontPixels(impl_->video_height);
     const int text_box_height =
         std::clamp(watermark_font_pixels * 3, watermark_font_pixels + 24, impl_->video_height / 4);
-    const Region text_region = makeMotionRegion(
-        impl_->video_width,
-        impl_->video_height,
-        text_box_width,
-        text_box_height,
-        impl_->source_job.watermark_margin,
-        impl_->source_job.watermark_bounce,
-        impl_->source_job.watermark_speed_x,
-        impl_->source_job.watermark_speed_y,
-        timestamp_seconds,
-        73,
-        41);
+    Region text_region;
+    text_region.x = 0;
+    text_region.y = 0;
+    text_region.w = text_box_width;
+    text_region.h = text_box_height;
     SubtitleOverlay text_overlay;
     if (text_renderer_.available()) {
       text_overlay = text_renderer_.render(timestamp_seconds, &text_region);
