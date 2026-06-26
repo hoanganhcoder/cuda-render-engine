@@ -27,6 +27,8 @@ struct DeviceRegion {
 };
 
 __constant__ DeviceRegion kDeviceRegions[CudaSubtitleRectEffect::kMaxRegions];
+__constant__ float kGaussianWeightsX[25];
+__constant__ float kGaussianWeightsY[25];
 
 inline void throwOnCudaError(cudaError_t result, const char* message) {
   if (result != cudaSuccess) {
@@ -36,9 +38,20 @@ inline void throwOnCudaError(cudaError_t result, const char* message) {
 
 inline int computeBlurRadiusHost(const DeviceRegion& region) {
   const float region_scale = std::max(static_cast<float>(region.h), static_cast<float>(region.w) * 0.15f);
-  const float base_radius = region_scale * (0.065f + region.horizontal_blur * 0.14f);
-  const float feather_boost = region.feather * 0.04f;
-  return std::max(6, std::min(static_cast<int>(base_radius + feather_boost), 24));
+  const float base_radius = region_scale * (0.045f + region.horizontal_blur * 0.10f);
+  const float feather_boost = region.feather * 0.025f;
+  return std::max(6, std::min(static_cast<int>(base_radius + feather_boost), 16));
+}
+
+inline std::array<float, 25> buildGaussianWeightsHost(int radius, float sigma) {
+  std::array<float, 25> weights{};
+  const int safe_radius = std::max(1, std::min(radius, static_cast<int>(weights.size()) - 1));
+  const float safe_sigma = std::max(sigma, 0.001f);
+  for (int offset = 0; offset <= safe_radius; ++offset) {
+    const float value = static_cast<float>(offset);
+    weights[static_cast<size_t>(offset)] = std::exp(-0.5f * (value * value) / (safe_sigma * safe_sigma));
+  }
+  return weights;
 }
 
 __device__ float clamp01(float value) {
@@ -105,9 +118,12 @@ __device__ int mapOutputToSourceCoord(int coord, int size, float video_scale, bo
   return clampInt(static_cast<int>(mapped + 0.5f), 0, size - 1);
 }
 
-__device__ float gaussianWeight1D(int offset, float sigma) {
-  const float value = static_cast<float>(offset);
-  return __expf(-0.5f * (value * value) / (sigma * sigma));
+__device__ float gaussianWeightX1D(int offset) {
+  return kGaussianWeightsX[abs(offset)];
+}
+
+__device__ float gaussianWeightY1D(int offset) {
+  return kGaussianWeightsY[abs(offset)];
 }
 
 __device__ float sampleOverlayAlpha(const DeviceSubtitleOverlay& overlay, int x, int y) {
@@ -135,6 +151,280 @@ __device__ uint8_t sampleOverlayMaskValue(const uint8_t* plane, const DeviceSubt
   return plane[local_y * overlay.stride + local_x];
 }
 
+__global__ void downsampleLumaKernel(
+    const uint8_t* source_y,
+    uint8_t* small_y,
+    int pitch_y,
+    int width,
+    int height,
+    int origin_x,
+    int origin_y,
+    int roi_width,
+    int roi_height,
+    int small_width,
+    int small_height,
+    int downscale,
+    float video_scale,
+    bool flip_horizontal) {
+  const int x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (x >= small_width || y >= small_height) {
+    return;
+  }
+
+  float accum = 0.0f;
+  float count = 0.0f;
+  const int base_x = origin_x + x * downscale;
+  const int base_y = origin_y + y * downscale;
+  for (int yy = 0; yy < downscale; ++yy) {
+    const int full_y = min(origin_y + roi_height - 1, base_y + yy);
+    const int sample_y = mapOutputToSourceCoord(full_y, height, video_scale, false, false);
+    for (int xx = 0; xx < downscale; ++xx) {
+      const int full_x = min(origin_x + roi_width - 1, base_x + xx);
+      const int sample_x = mapOutputToSourceCoord(full_x, width, video_scale, flip_horizontal, true);
+      accum += normalizeByte(loadLuma(source_y, pitch_y, width, height, sample_x, sample_y));
+      count += 1.0f;
+    }
+  }
+  small_y[y * small_width + x] = denormalizeByte(accum / fmaxf(count, 1.0f));
+}
+
+__global__ void blurSmallLumaHorizontalKernel(
+    const uint8_t* input_y,
+    uint8_t* output_y,
+    int small_width,
+    int small_height,
+    int blur_radius) {
+  const int x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (x >= small_width || y >= small_height) {
+    return;
+  }
+
+  float accum = 0.0f;
+  float total_weight = 0.0f;
+  for (int dx = -blur_radius; dx <= blur_radius; ++dx) {
+    const float weight = gaussianWeightX1D(dx);
+    const int sample_x = clampInt(x + dx, 0, small_width - 1);
+    accum += normalizeByte(input_y[y * small_width + sample_x]) * weight;
+    total_weight += weight;
+  }
+  output_y[y * small_width + x] = denormalizeByte(accum / fmaxf(total_weight, 1.0f));
+}
+
+__global__ void blendSmallLumaVerticalKernel(
+    const uint8_t* small_y,
+    const uint8_t* previous_y,
+    uint8_t* output_y,
+    int pitch_y,
+    int width,
+    int height,
+    int origin_x,
+    int origin_y,
+    int roi_width,
+    int roi_height,
+    int small_width,
+    int small_height,
+    int downscale,
+    int region_count,
+    int blur_radius_y,
+    DeviceSubtitleOverlay overlay) {
+  const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int local_y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (local_x >= roi_width || local_y >= roi_height) {
+    return;
+  }
+  const int x = origin_x + local_x;
+  const int y = origin_y + local_y;
+  const int small_x = clampInt(local_x / downscale, 0, small_width - 1);
+  const int small_y_center = clampInt(local_y / downscale, 0, small_height - 1);
+
+  float accum = 0.0f;
+  float total_weight = 0.0f;
+  for (int dy = -blur_radius_y; dy <= blur_radius_y; ++dy) {
+    const float weight = gaussianWeightY1D(dy);
+    const int sample_y = clampInt(small_y_center + dy, 0, small_height - 1);
+    accum += normalizeByte(small_y[sample_y * small_width + small_x]) * weight;
+    total_weight += weight;
+  }
+
+  float current = normalizeByte(loadLuma(output_y, pitch_y, width, height, x, y));
+  const float blur_value = accum / fmaxf(total_weight, 1.0f);
+  for (int i = 0; i < region_count; ++i) {
+    const DeviceRegion& region = kDeviceRegions[i];
+    const float mask = edgeMask(region, x, y) * clamp01(region.strength);
+    if (mask <= 0.0f) {
+      continue;
+    }
+    float blended = mixFloat(current, blur_value, mask);
+    if (previous_y != nullptr && region.temporal_blend > 0.0f) {
+      const float previous = normalizeByte(loadLuma(previous_y, pitch_y, width, height, x, y));
+      blended = mixFloat(blended, previous, clamp01(region.temporal_blend * mask));
+    }
+    current = blended;
+  }
+
+  const float overlay_alpha = sampleOverlayAlpha(overlay, x, y);
+  if (overlay_alpha > 0.0f) {
+    current = mixFloat(current, normalizeByte(sampleOverlayMaskValue(overlay.luma_mask, overlay, x, y)), overlay_alpha);
+  }
+  output_y[y * pitch_y + x] = denormalizeByte(current);
+}
+
+__global__ void downsampleChromaKernel(
+    const uint8_t* source_uv,
+    uint8_t* small_uv,
+    int pitch_uv,
+    int chroma_width,
+    int chroma_height,
+    int origin_x,
+    int origin_y,
+    int roi_width,
+    int roi_height,
+    int small_width,
+    int small_height,
+    int downscale,
+    float video_scale,
+    bool flip_horizontal) {
+  const int x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (x >= small_width || y >= small_height) {
+    return;
+  }
+
+  float accum_u = 0.0f;
+  float accum_v = 0.0f;
+  float count = 0.0f;
+  const int base_x = origin_x + x * downscale;
+  const int base_y = origin_y + y * downscale;
+  for (int yy = 0; yy < downscale; ++yy) {
+    const int full_y = min(origin_y + roi_height - 1, base_y + yy);
+    const int sample_y = mapOutputToSourceCoord(full_y * 2, chroma_height * 2, video_scale, false, false) / 2;
+    for (int xx = 0; xx < downscale; ++xx) {
+      const int full_x = min(origin_x + roi_width - 1, base_x + xx);
+      const int sample_x = mapOutputToSourceCoord(full_x * 2, chroma_width * 2, video_scale, flip_horizontal, true) / 2;
+      const uchar2 sample = loadChroma(source_uv, pitch_uv, chroma_width, chroma_height, sample_x, sample_y);
+      accum_u += normalizeByte(sample.x);
+      accum_v += normalizeByte(sample.y);
+      count += 1.0f;
+    }
+  }
+
+  uint8_t* row = small_uv + (y * small_width + x) * 2;
+  row[0] = denormalizeByte(accum_u / fmaxf(count, 1.0f));
+  row[1] = denormalizeByte(accum_v / fmaxf(count, 1.0f));
+}
+
+__global__ void blurSmallChromaHorizontalKernel(
+    const uint8_t* input_uv,
+    uint8_t* output_uv,
+    int small_width,
+    int small_height,
+    int blur_radius) {
+  const int x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (x >= small_width || y >= small_height) {
+    return;
+  }
+
+  float accum_u = 0.0f;
+  float accum_v = 0.0f;
+  float total_weight = 0.0f;
+  for (int dx = -blur_radius; dx <= blur_radius; ++dx) {
+    const float weight = gaussianWeightX1D(dx);
+    const int sample_x = clampInt(x + dx, 0, small_width - 1);
+    const uint8_t* sample = input_uv + (y * small_width + sample_x) * 2;
+    accum_u += normalizeByte(sample[0]) * weight;
+    accum_v += normalizeByte(sample[1]) * weight;
+    total_weight += weight;
+  }
+
+  uint8_t* row = output_uv + (y * small_width + x) * 2;
+  row[0] = denormalizeByte(accum_u / fmaxf(total_weight, 1.0f));
+  row[1] = denormalizeByte(accum_v / fmaxf(total_weight, 1.0f));
+}
+
+__global__ void blendSmallChromaVerticalKernel(
+    const uint8_t* small_uv,
+    const uint8_t* previous_uv,
+    uint8_t* output_uv,
+    int pitch_uv,
+    int chroma_width,
+    int chroma_height,
+    int origin_x,
+    int origin_y,
+    int roi_width,
+    int roi_height,
+    int small_width,
+    int small_height,
+    int downscale,
+    int region_count,
+    int blur_radius_y,
+    DeviceSubtitleOverlay overlay) {
+  const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
+  const int local_y = blockIdx.y * blockDim.y + threadIdx.y;
+  if (local_x >= roi_width || local_y >= roi_height) {
+    return;
+  }
+  const int x = origin_x + local_x;
+  const int y = origin_y + local_y;
+  const int small_x = clampInt(local_x / downscale, 0, small_width - 1);
+  const int small_y_center = clampInt(local_y / downscale, 0, small_height - 1);
+
+  float accum_u = 0.0f;
+  float accum_v = 0.0f;
+  float total_weight = 0.0f;
+  for (int dy = -blur_radius_y; dy <= blur_radius_y; ++dy) {
+    const float weight = gaussianWeightY1D(dy);
+    const int sample_y = clampInt(small_y_center + dy, 0, small_height - 1);
+    const uint8_t* sample = small_uv + (sample_y * small_width + small_x) * 2;
+    accum_u += normalizeByte(sample[0]) * weight;
+    accum_v += normalizeByte(sample[1]) * weight;
+    total_weight += weight;
+  }
+
+  const int full_x = x * 2;
+  const int full_y = y * 2;
+  const uchar2 current_uv = loadChroma(output_uv, pitch_uv, chroma_width, chroma_height, x, y);
+  float current_u = normalizeByte(current_uv.x);
+  float current_v = normalizeByte(current_uv.y);
+  const float blur_u = accum_u / fmaxf(total_weight, 1.0f);
+  const float blur_v = accum_v / fmaxf(total_weight, 1.0f);
+
+  for (int i = 0; i < region_count; ++i) {
+    const DeviceRegion& region = kDeviceRegions[i];
+    const float mask = edgeMask(region, full_x, full_y) * clamp01(region.strength) * 0.85f;
+    if (mask <= 0.0f) {
+      continue;
+    }
+    float blended_u = mixFloat(current_u, blur_u, mask);
+    float blended_v = mixFloat(current_v, blur_v, mask);
+    if (previous_uv != nullptr && region.temporal_blend > 0.0f) {
+      const uchar2 previous = loadChroma(previous_uv, pitch_uv, chroma_width, chroma_height, x, y);
+      blended_u = mixFloat(blended_u, normalizeByte(previous.x), clamp01(region.temporal_blend * mask));
+      blended_v = mixFloat(blended_v, normalizeByte(previous.y), clamp01(region.temporal_blend * mask));
+    }
+    current_u = blended_u;
+    current_v = blended_v;
+  }
+
+  const float overlay_alpha = sampleOverlayAlpha(overlay, full_x, full_y);
+  if (overlay_alpha > 0.0f) {
+    current_u = mixFloat(
+        current_u,
+        normalizeByte(sampleOverlayMaskValue(overlay.chroma_u_mask, overlay, full_x, full_y)),
+        overlay_alpha);
+    current_v = mixFloat(
+        current_v,
+        normalizeByte(sampleOverlayMaskValue(overlay.chroma_v_mask, overlay, full_x, full_y)),
+        overlay_alpha);
+  }
+
+  uint8_t* row = output_uv + y * pitch_uv + x * 2;
+  row[0] = denormalizeByte(current_u);
+  row[1] = denormalizeByte(current_v);
+}
+
 __global__ void gaussianHorizontalLumaKernel(
     const uint8_t* source_y,
     uint8_t* temp_y,
@@ -147,8 +437,7 @@ __global__ void gaussianHorizontalLumaKernel(
     int roi_height,
     float video_scale,
     bool flip_horizontal,
-    int blur_radius,
-    float sigma_x) {
+    int blur_radius) {
   const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
   const int local_y = blockIdx.y * blockDim.y + threadIdx.y;
   if (local_x >= roi_width || local_y >= roi_height) {
@@ -160,7 +449,7 @@ __global__ void gaussianHorizontalLumaKernel(
   float accum = 0.0f;
   float total_weight = 0.0f;
   for (int dx = -blur_radius; dx <= blur_radius; ++dx) {
-    const float weight = gaussianWeight1D(dx, sigma_x);
+    const float weight = gaussianWeightX1D(dx);
     const int sample_x = mapOutputToSourceCoord(x + dx, width, video_scale, flip_horizontal, true);
     const int sample_y = mapOutputToSourceCoord(y, height, video_scale, false, false);
     accum += normalizeByte(loadLuma(source_y, pitch_y, width, height, sample_x, sample_y)) * weight;
@@ -182,7 +471,6 @@ __global__ void gaussianVerticalLumaKernel(
     int roi_height,
     int region_count,
     int blur_radius_y,
-    float sigma_y,
     DeviceSubtitleOverlay overlay) {
   const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
   const int local_y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -197,7 +485,7 @@ __global__ void gaussianVerticalLumaKernel(
   float accum = 0.0f;
   float total_weight = 0.0f;
   for (int dy = -blur_radius_y; dy <= blur_radius_y; ++dy) {
-    const float weight = gaussianWeight1D(dy, sigma_y);
+    const float weight = gaussianWeightY1D(dy);
     accum += normalizeByte(loadLuma(temp_y, pitch_y, width, height, x, y + dy)) * weight;
     total_weight += weight;
   }
@@ -237,8 +525,7 @@ __global__ void gaussianHorizontalChromaKernel(
     int roi_height,
     float video_scale,
     bool flip_horizontal,
-    int blur_radius,
-    float sigma_x) {
+    int blur_radius) {
   const int chroma_width = width / 2;
   const int chroma_height = height / 2;
   const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
@@ -253,7 +540,7 @@ __global__ void gaussianHorizontalChromaKernel(
   float accum_v = 0.0f;
   float total_weight = 0.0f;
   for (int dx = -blur_radius; dx <= blur_radius; ++dx) {
-    const float weight = gaussianWeight1D(dx, sigma_x);
+    const float weight = gaussianWeightX1D(dx);
     const int sample_x = mapOutputToSourceCoord(x * 2 + dx * 2, width, video_scale, flip_horizontal, true) / 2;
     const int sample_y = mapOutputToSourceCoord(y * 2, height, video_scale, false, false) / 2;
     const uchar2 sample = loadChroma(source_uv, pitch_uv, chroma_width, chroma_height, sample_x, sample_y);
@@ -280,7 +567,6 @@ __global__ void gaussianVerticalChromaKernel(
     int roi_height,
     int region_count,
     int blur_radius_y,
-    float sigma_y,
     DeviceSubtitleOverlay overlay) {
   const int chroma_width = width / 2;
   const int chroma_height = height / 2;
@@ -302,7 +588,7 @@ __global__ void gaussianVerticalChromaKernel(
   float accum_v = 0.0f;
   float total_weight = 0.0f;
   for (int dy = -blur_radius_y; dy <= blur_radius_y; ++dy) {
-    const float weight = gaussianWeight1D(dy, sigma_y);
+    const float weight = gaussianWeightY1D(dy);
     const uchar2 sample = loadChroma(temp_uv, pitch_uv, chroma_width, chroma_height, x, y + dy);
     accum_u += normalizeByte(sample.x) * weight;
     accum_v += normalizeByte(sample.y) * weight;
@@ -572,8 +858,6 @@ void CudaSubtitleRectEffect::apply(
 
     int max_radius_x = 0;
     int max_radius_y = 0;
-    float max_sigma_x = 1.0f;
-    float max_sigma_y = 1.0f;
     int roi_x0 = width;
     int roi_y0 = height;
     int roi_x1 = 0;
@@ -584,8 +868,6 @@ void CudaSubtitleRectEffect::apply(
       const int radius_y = max(2, static_cast<int>(static_cast<float>(radius_x) * fmaxf(region.vertical_stretch, 0.85f) * 0.32f));
       max_radius_x = max(max_radius_x, radius_x);
       max_radius_y = max(max_radius_y, radius_y);
-      max_sigma_x = fmaxf(max_sigma_x, fmaxf(2.8f, static_cast<float>(radius_x) * 0.72f));
-      max_sigma_y = fmaxf(max_sigma_y, fmaxf(1.6f, static_cast<float>(radius_y) * 0.90f));
       const int expand_x = max(2, static_cast<int>(region.feather) + radius_x * 2);
       const int expand_y = max(2, static_cast<int>(region.feather * 0.75f) + max(2, radius_y * 2));
       roi_x0 = min(roi_x0, max(0, region.x - expand_x));
@@ -603,10 +885,40 @@ void CudaSubtitleRectEffect::apply(
     const int roi_height = roi_y1 - roi_y0;
     dim3 roi_grid((roi_width + block.x - 1) / block.x, (roi_height + block.y - 1) / block.y);
 
-    temp_luma_.allocate(static_cast<size_t>(source_frame->linesize[0]) * static_cast<size_t>(height));
-    temp_chroma_.allocate(static_cast<size_t>(source_frame->linesize[1]) * static_cast<size_t>(height / 2));
+    const int luma_downscale = 4;
+    const int small_luma_width = (roi_width + luma_downscale - 1) / luma_downscale;
+    const int small_luma_height = (roi_height + luma_downscale - 1) / luma_downscale;
+    const int small_radius_x = std::max(3, std::min(24, (max_radius_x + luma_downscale - 1) / luma_downscale + 4));
+    const int small_radius_y = std::max(2, std::min(24, (max_radius_y + luma_downscale - 1) / luma_downscale + 2));
+    const float small_sigma_x = std::max(2.4f, static_cast<float>(small_radius_x) * 0.85f);
+    const float small_sigma_y = std::max(1.6f, static_cast<float>(small_radius_y) * 0.90f);
 
-    gaussianHorizontalLumaKernel<<<roi_grid, block, 0, stream>>>(
+    temp_luma_.allocate(static_cast<size_t>(small_luma_width) * static_cast<size_t>(small_luma_height));
+    temp_luma_blur_.allocate(static_cast<size_t>(small_luma_width) * static_cast<size_t>(small_luma_height));
+
+    const std::array<float, 25> weights_x = buildGaussianWeightsHost(small_radius_x, small_sigma_x);
+    const std::array<float, 25> weights_y = buildGaussianWeightsHost(small_radius_y, small_sigma_y);
+    throwOnCudaError(cudaMemcpyToSymbolAsync(
+                         kGaussianWeightsX,
+                         weights_x.data(),
+                         sizeof(float) * weights_x.size(),
+                         0,
+                         cudaMemcpyHostToDevice,
+                         stream),
+                     "Failed to upload horizontal Gaussian weights");
+    throwOnCudaError(cudaMemcpyToSymbolAsync(
+                         kGaussianWeightsY,
+                         weights_y.data(),
+                         sizeof(float) * weights_y.size(),
+                         0,
+                         cudaMemcpyHostToDevice,
+                         stream),
+                     "Failed to upload vertical Gaussian weights");
+
+    dim3 small_luma_grid(
+        (small_luma_width + block.x - 1) / block.x,
+        (small_luma_height + block.y - 1) / block.y);
+    downsampleLumaKernel<<<small_luma_grid, block, 0, stream>>>(
         source_y,
         temp_luma_.data(),
         source_frame->linesize[0],
@@ -616,12 +928,19 @@ void CudaSubtitleRectEffect::apply(
         roi_y0,
         roi_width,
         roi_height,
+        small_luma_width,
+        small_luma_height,
+        luma_downscale,
         video_scale,
-        flip_horizontal,
-        max_radius_x,
-        max_sigma_x);
-    gaussianVerticalLumaKernel<<<roi_grid, block, 0, stream>>>(
+        flip_horizontal);
+    blurSmallLumaHorizontalKernel<<<small_luma_grid, block, 0, stream>>>(
         temp_luma_.data(),
+        temp_luma_blur_.data(),
+        small_luma_width,
+        small_luma_height,
+        small_radius_x);
+    blendSmallLumaVerticalKernel<<<roi_grid, block, 0, stream>>>(
+        temp_luma_blur_.data(),
         previous_y,
         output_y,
         source_frame->linesize[0],
@@ -631,51 +950,71 @@ void CudaSubtitleRectEffect::apply(
         roi_y0,
         roi_width,
         roi_height,
+        small_luma_width,
+        small_luma_height,
+        luma_downscale,
         region_count,
-        max_radius_y,
-        max_sigma_y,
+        small_radius_y,
         text_overlay);
 
+    const int chroma_width = width / 2;
+    const int chroma_height = height / 2;
     const int chroma_roi_x0 = roi_x0 / 2;
     const int chroma_roi_y0 = roi_y0 / 2;
     const int chroma_roi_x1 = (roi_x1 + 1) / 2;
     const int chroma_roi_y1 = (roi_y1 + 1) / 2;
-    const int chroma_roi_width = max(0, chroma_roi_x1 - chroma_roi_x0);
-    const int chroma_roi_height = max(0, chroma_roi_y1 - chroma_roi_y0);
-    dim3 chroma_grid(
-        (chroma_roi_width + block.x - 1) / block.x,
-        (chroma_roi_height + block.y - 1) / block.y);
-    const int chroma_radius_x = max(1, (max_radius_x + 1) / 3);
-    const int chroma_radius_y = max(1, (max_radius_y + 1) / 3);
+    const int chroma_roi_width = std::max(0, chroma_roi_x1 - chroma_roi_x0);
+    const int chroma_roi_height = std::max(0, chroma_roi_y1 - chroma_roi_y0);
     if (chroma_roi_width > 0 && chroma_roi_height > 0) {
-      gaussianHorizontalChromaKernel<<<chroma_grid, block, 0, stream>>>(
+      const int chroma_downscale = 2;
+      const int small_chroma_width = (chroma_roi_width + chroma_downscale - 1) / chroma_downscale;
+      const int small_chroma_height = (chroma_roi_height + chroma_downscale - 1) / chroma_downscale;
+      temp_chroma_.allocate(static_cast<size_t>(small_chroma_width) * static_cast<size_t>(small_chroma_height) * 2);
+      temp_chroma_blur_.allocate(static_cast<size_t>(small_chroma_width) * static_cast<size_t>(small_chroma_height) * 2);
+
+      dim3 small_chroma_grid(
+          (small_chroma_width + block.x - 1) / block.x,
+          (small_chroma_height + block.y - 1) / block.y);
+      dim3 chroma_roi_grid(
+          (chroma_roi_width + block.x - 1) / block.x,
+          (chroma_roi_height + block.y - 1) / block.y);
+      downsampleChromaKernel<<<small_chroma_grid, block, 0, stream>>>(
           source_uv,
           temp_chroma_.data(),
           source_frame->linesize[1],
-          width,
-          height,
+          chroma_width,
+          chroma_height,
           chroma_roi_x0,
           chroma_roi_y0,
           chroma_roi_width,
           chroma_roi_height,
+          small_chroma_width,
+          small_chroma_height,
+          chroma_downscale,
           video_scale,
-          flip_horizontal,
-          chroma_radius_x,
-          fmaxf(1.0f, static_cast<float>(chroma_radius_x) * 0.8f));
-      gaussianVerticalChromaKernel<<<chroma_grid, block, 0, stream>>>(
+          flip_horizontal);
+      blurSmallChromaHorizontalKernel<<<small_chroma_grid, block, 0, stream>>>(
           temp_chroma_.data(),
+          temp_chroma_blur_.data(),
+          small_chroma_width,
+          small_chroma_height,
+          small_radius_x);
+      blendSmallChromaVerticalKernel<<<chroma_roi_grid, block, 0, stream>>>(
+          temp_chroma_blur_.data(),
           previous_uv,
           output_uv,
           source_frame->linesize[1],
-          width,
-          height,
+          chroma_width,
+          chroma_height,
           chroma_roi_x0,
           chroma_roi_y0,
           chroma_roi_width,
           chroma_roi_height,
+          small_chroma_width,
+          small_chroma_height,
+          chroma_downscale,
           region_count,
-          chroma_radius_y,
-          fmaxf(1.0f, static_cast<float>(chroma_radius_y) * 0.8f),
+          small_radius_y,
           text_overlay);
     }
   } else {

@@ -48,7 +48,9 @@ public:
 
 private:
   mutable CudaBuffer temp_luma_;
+  mutable CudaBuffer temp_luma_blur_;
   mutable CudaBuffer temp_chroma_;
+  mutable CudaBuffer temp_chroma_blur_;
 };
 
 }  // namespace video_engine
