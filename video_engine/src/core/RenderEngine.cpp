@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdint>
 #include <sstream>
 #include <stdexcept>
+#include <string>
 
 #include <libavutil/hwcontext.h>
 
@@ -32,6 +34,79 @@ struct RenderStageTimers {
 
 double elapsedSecondsSince(std::chrono::steady_clock::time_point start) {
   return std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::steady_clock::now() - start).count();
+}
+
+int makeEven(int value) {
+  return std::max(2, value - (value % 2));
+}
+
+double parseAspectRatio(const std::string& value) {
+  const size_t colon = value.find(':');
+  if (colon == std::string::npos) {
+    return 16.0 / 9.0;
+  }
+  const double width = std::stod(value.substr(0, colon));
+  const double height = std::stod(value.substr(colon + 1));
+  return height > 0.0 ? width / height : 16.0 / 9.0;
+}
+
+void rgbToYuv(uint8_t red, uint8_t green, uint8_t blue, uint8_t& y, uint8_t& u, uint8_t& v) {
+  const float yf = 0.299f * red + 0.587f * green + 0.114f * blue;
+  const float uf = -0.168736f * red - 0.331264f * green + 0.5f * blue + 128.0f;
+  const float vf = 0.5f * red - 0.418688f * green - 0.081312f * blue + 128.0f;
+  y = static_cast<uint8_t>(std::clamp(yf, 0.0f, 255.0f));
+  u = static_cast<uint8_t>(std::clamp(uf, 0.0f, 255.0f));
+  v = static_cast<uint8_t>(std::clamp(vf, 0.0f, 255.0f));
+}
+
+uint8_t parseHexByte(const std::string& value, size_t offset) {
+  return static_cast<uint8_t>(std::stoul(value.substr(offset, 2), nullptr, 16));
+}
+
+DeviceVideoTransform makeVideoTransform(
+    const RenderJob& job,
+    int input_width,
+    int input_height,
+    int output_width,
+    int output_height) {
+  DeviceVideoTransform transform;
+  if (job.bg_color.size() >= 7 && job.bg_color[0] == '#') {
+    rgbToYuv(
+        parseHexByte(job.bg_color, 1),
+        parseHexByte(job.bg_color, 3),
+        parseHexByte(job.bg_color, 5),
+        transform.bg_y,
+        transform.bg_u,
+        transform.bg_v);
+  }
+
+  const float scale_x = static_cast<float>(output_width) / static_cast<float>(input_width);
+  const float scale_y = static_cast<float>(output_height) / static_cast<float>(input_height);
+  float display_scale_x = scale_x;
+  float display_scale_y = scale_y;
+  if (job.resize_mode == "fit") {
+    display_scale_x = display_scale_y = std::min(scale_x, scale_y);
+  } else if (job.resize_mode == "fill") {
+    display_scale_x = display_scale_y = std::max(scale_x, scale_y);
+  }
+  display_scale_x *= std::max(job.video_scale, 1.0f);
+  display_scale_y *= std::max(job.video_scale, 1.0f);
+
+  transform.display_width = static_cast<float>(input_width) * display_scale_x;
+  transform.display_height = static_cast<float>(input_height) * display_scale_y;
+
+  auto aligned_offset = [](const std::string& align, float output_size, float display_size) {
+    if (align == "left" || align == "top") {
+      return 0.0f;
+    }
+    if (align == "right" || align == "bottom") {
+      return output_size - display_size;
+    }
+    return (output_size - display_size) * 0.5f;
+  };
+  transform.display_x = aligned_offset(job.video_align_h, static_cast<float>(output_width), transform.display_width);
+  transform.display_y = aligned_offset(job.video_align_v, static_cast<float>(output_height), transform.display_height);
+  return transform;
 }
 
 SubtitleOverlay makeCanvasOverlay(int x, int y, int width, int height) {
@@ -177,7 +252,7 @@ bool needsPreviousFrameHistory(const std::vector<Region>& regions) {
 }
 
 bool sameUploadedOverlay(const SubtitleOverlay& previous, const SubtitleOverlay& current) {
-  return previous.enabled == current.enabled && previous.x == current.x && previous.y == current.y &&
+  return previous.enabled == current.enabled &&
          previous.width == current.width && previous.height == current.height && previous.stride == current.stride &&
          previous.opacity == current.opacity && previous.cue_text == current.cue_text &&
          previous.alpha_mask.size() == current.alpha_mask.size() && previous.luma_mask.size() == current.luma_mask.size() &&
@@ -201,16 +276,21 @@ bool RenderEngine::render(const RenderJob& input_job) {
     FFmpegEncoder encoder;
     AVFrame* decoded_frame = nullptr;
     double timestamp_seconds = 0.0;
-    SubtitleOverlay current_overlay;
-    SubtitleOverlay uploaded_overlay;
-    bool has_uploaded_overlay = false;
+    SubtitleOverlay current_subtitle_overlay;
+    SubtitleOverlay uploaded_subtitle_overlay;
+    bool has_uploaded_subtitle_overlay = false;
+    SubtitleOverlay current_top_overlay;
+    SubtitleOverlay uploaded_top_overlay;
+    bool has_uploaded_top_overlay = false;
 
     decoder.open(job.input);
-    if (job.width <= 0) {
-      job.width = decoder.width();
-    }
-    if (job.height <= 0) {
+    if (job.width <= 0 && job.height <= 0) {
       job.height = decoder.height();
+      job.width = makeEven(static_cast<int>(std::lround(static_cast<double>(job.height) * parseAspectRatio(job.video_aspect_ratio))));
+    } else if (job.width <= 0) {
+      job.width = makeEven(static_cast<int>(std::lround(static_cast<double>(job.height) * parseAspectRatio(job.video_aspect_ratio))));
+    } else if (job.height <= 0) {
+      job.height = makeEven(static_cast<int>(std::lround(static_cast<double>(job.width) / parseAspectRatio(job.video_aspect_ratio))));
     }
     if (job.fps <= 0.0) {
       job.fps = decoder.fps();
@@ -222,13 +302,22 @@ bool RenderEngine::render(const RenderJob& input_job) {
     for (Region& region : job.regions) {
       region.clampToBounds(job.width, job.height);
     }
-    const bool use_previous_frame_history = needsPreviousFrameHistory(job.regions);
+    for (Region& region : job.subtitle_regions) {
+      region.clampToBounds(job.width, job.height);
+    }
+    for (Region& region : job.blur_regions) {
+      region.clampToBounds(job.width, job.height);
+    }
+    const std::vector<Region>& effective_blur_regions = job.blur_regions.empty() ? job.regions : job.blur_regions;
+    const bool use_previous_frame_history = needsPreviousFrameHistory(effective_blur_regions);
     blur_box_effect_.initialize(sequence_input);
     current_job_ = job;
     current_video_width_ = job.width;
     current_video_height_ = job.height;
     subtitle_layer_renderer_.initialize(job, job.width, job.height);
     overlay_layer_renderer_.initialize(job, job.width, job.height);
+    const DeviceVideoTransform video_transform =
+        makeVideoTransform(job, decoder.width(), decoder.height(), job.width, job.height);
     if (!job.subtitle_srt.empty() || !job.subtitle_text.empty()) {
       if (subtitle_layer_renderer_.available()) {
         Logger::info("Using subtitle layer renderer.");
@@ -243,9 +332,6 @@ bool RenderEngine::render(const RenderJob& input_job) {
     RenderStageTimers interval_timers;
     int frame_index = 0;
     while (decoder.read(decoded_frame, timestamp_seconds)) {
-      if (decoded_frame->width != job.width || decoded_frame->height != job.height) {
-        throw std::runtime_error("Decoder output resolution differs from configured output resolution.");
-      }
       if (!decoded_frame->hw_frames_ctx) {
         throw std::runtime_error("Decoded frame does not carry CUDA hardware frames context.");
       }
@@ -254,49 +340,36 @@ bool RenderEngine::render(const RenderJob& input_job) {
       }
 
       if (!output_frame) {
-        output_frame = allocateHardwareFrame(decoded_frame->hw_frames_ctx, job.width, job.height);
-        if (use_previous_frame_history) {
-          previous_frame = allocateHardwareFrame(decoded_frame->hw_frames_ctx, job.width, job.height);
-        }
         encoder.open(job.output, job.width, job.height, job.fps, decoder.hwDeviceContext(), decoded_frame->hw_frames_ctx);
+        output_frame = allocateHardwareFrame(encoder.hwFramesContext(), job.width, job.height);
+        if (use_previous_frame_history) {
+          previous_frame = allocateHardwareFrame(encoder.hwFramesContext(), job.width, job.height);
+        }
       }
 
       const std::vector<Region> active_blur_regions = blur_box_effect_.collectActiveRegions(timestamp_seconds);
       const auto overlay_start_time = std::chrono::steady_clock::now();
-      current_overlay = buildCompositeOverlay(timestamp_seconds);
+      current_subtitle_overlay = buildSubtitleOverlay(timestamp_seconds);
+      current_top_overlay = buildTopOverlay(timestamp_seconds);
       interval_timers.overlay_seconds += elapsedSecondsSince(overlay_start_time);
-      if (!has_uploaded_overlay || !sameUploadedOverlay(uploaded_overlay, current_overlay)) {
-        const auto upload_start_time = std::chrono::steady_clock::now();
-        if (current_overlay.enabled) {
-          subtitle_mask_buffer_.upload(current_overlay.alpha_mask, cuda_context_.stream());
-          subtitle_luma_buffer_.upload(current_overlay.luma_mask, cuda_context_.stream());
-          subtitle_chroma_u_buffer_.upload(current_overlay.chroma_u_mask, cuda_context_.stream());
-          subtitle_chroma_v_buffer_.upload(current_overlay.chroma_v_mask, cuda_context_.stream());
-        } else {
-          subtitle_mask_buffer_.release();
-          subtitle_luma_buffer_.release();
-          subtitle_chroma_u_buffer_.release();
-          subtitle_chroma_v_buffer_.release();
-        }
-        uploaded_overlay = current_overlay;
-        has_uploaded_overlay = true;
-        interval_timers.upload_seconds += elapsedSecondsSince(upload_start_time);
-      }
-
-      DeviceSubtitleOverlay device_overlay{};
-      if (current_overlay.enabled && subtitle_mask_buffer_.allocated() && subtitle_luma_buffer_.allocated() &&
-          subtitle_chroma_u_buffer_.allocated() && subtitle_chroma_v_buffer_.allocated()) {
-        device_overlay.alpha_mask = subtitle_mask_buffer_.data();
-        device_overlay.luma_mask = subtitle_luma_buffer_.data();
-        device_overlay.chroma_u_mask = subtitle_chroma_u_buffer_.data();
-        device_overlay.chroma_v_mask = subtitle_chroma_v_buffer_.data();
-        device_overlay.x = current_overlay.x;
-        device_overlay.y = current_overlay.y;
-        device_overlay.width = current_overlay.width;
-        device_overlay.height = current_overlay.height;
-        device_overlay.stride = current_overlay.stride;
-        device_overlay.opacity = current_overlay.opacity;
-      }
+      const auto upload_start_time = std::chrono::steady_clock::now();
+      DeviceSubtitleOverlay subtitle_device_overlay = uploadOverlay(
+          current_subtitle_overlay,
+          uploaded_subtitle_overlay,
+          has_uploaded_subtitle_overlay,
+          subtitle_mask_buffer_,
+          subtitle_luma_buffer_,
+          subtitle_chroma_u_buffer_,
+          subtitle_chroma_v_buffer_);
+      DeviceSubtitleOverlay top_device_overlay = uploadOverlay(
+          current_top_overlay,
+          uploaded_top_overlay,
+          has_uploaded_top_overlay,
+          overlay_mask_buffer_,
+          overlay_luma_buffer_,
+          overlay_chroma_u_buffer_,
+          overlay_chroma_v_buffer_);
+      interval_timers.upload_seconds += elapsedSecondsSince(upload_start_time);
 
       const auto effect_start_time = std::chrono::steady_clock::now();
       blur_box_effect_.apply(
@@ -304,10 +377,24 @@ bool RenderEngine::render(const RenderJob& input_job) {
           use_previous_frame_history && frame_index > 0 ? previous_frame : nullptr,
           output_frame,
           active_blur_regions,
-          job.video_scale,
+          1.0f,
           job.flip_horizontal,
-          device_overlay,
+          video_transform,
+          subtitle_device_overlay,
           cuda_context_.stream());
+      if (top_device_overlay.enabled()) {
+        static const std::vector<Region> kNoBlurRegions;
+        blur_box_effect_.apply(
+            output_frame,
+            nullptr,
+            output_frame,
+            kNoBlurRegions,
+            1.0f,
+            false,
+            DeviceVideoTransform{0.0f, 0.0f, static_cast<float>(job.width), static_cast<float>(job.height), 16, 128, 128},
+            top_device_overlay,
+            cuda_context_.stream());
+      }
       interval_timers.effect_seconds += elapsedSecondsSince(effect_start_time);
       output_frame->format = AV_PIX_FMT_CUDA;
       output_frame->width = job.width;
@@ -354,19 +441,61 @@ bool RenderEngine::render(const RenderJob& input_job) {
   }
 }
 
-SubtitleOverlay RenderEngine::buildCompositeOverlay(double timestamp_seconds) const {
-  std::vector<SubtitleOverlay> overlays;
+SubtitleOverlay RenderEngine::buildSubtitleOverlay(double timestamp_seconds) const {
   if (subtitle_layer_renderer_.available()) {
     const std::vector<SubtitleOverlay> subtitle_layers = subtitle_layer_renderer_.render(timestamp_seconds);
-    overlays.insert(overlays.end(), subtitle_layers.begin(), subtitle_layers.end());
+    return combineOverlays(subtitle_layers, current_video_width_, current_video_height_);
   }
+  return SubtitleOverlay{};
+}
 
+SubtitleOverlay RenderEngine::buildTopOverlay(double timestamp_seconds) const {
   if (overlay_layer_renderer_.available()) {
     const std::vector<SubtitleOverlay> overlay_layers = overlay_layer_renderer_.render(timestamp_seconds);
-    overlays.insert(overlays.end(), overlay_layers.begin(), overlay_layers.end());
+    return combineOverlays(overlay_layers, current_video_width_, current_video_height_);
+  }
+  return SubtitleOverlay{};
+}
+
+DeviceSubtitleOverlay RenderEngine::uploadOverlay(
+    const SubtitleOverlay& overlay,
+    SubtitleOverlay& uploaded_overlay,
+    bool& has_uploaded_overlay,
+    CudaBuffer& alpha_buffer,
+    CudaBuffer& luma_buffer,
+    CudaBuffer& chroma_u_buffer,
+    CudaBuffer& chroma_v_buffer) {
+  if (!has_uploaded_overlay || !sameUploadedOverlay(uploaded_overlay, overlay)) {
+    if (overlay.enabled) {
+      alpha_buffer.upload(overlay.alpha_mask, cuda_context_.stream());
+      luma_buffer.upload(overlay.luma_mask, cuda_context_.stream());
+      chroma_u_buffer.upload(overlay.chroma_u_mask, cuda_context_.stream());
+      chroma_v_buffer.upload(overlay.chroma_v_mask, cuda_context_.stream());
+    } else {
+      alpha_buffer.release();
+      luma_buffer.release();
+      chroma_u_buffer.release();
+      chroma_v_buffer.release();
+    }
+    uploaded_overlay = overlay;
+    has_uploaded_overlay = true;
   }
 
-  return combineOverlays(overlays, current_video_width_, current_video_height_);
+  DeviceSubtitleOverlay device_overlay{};
+  if (overlay.enabled && alpha_buffer.allocated() && luma_buffer.allocated() && chroma_u_buffer.allocated() &&
+      chroma_v_buffer.allocated()) {
+    device_overlay.alpha_mask = alpha_buffer.data();
+    device_overlay.luma_mask = luma_buffer.data();
+    device_overlay.chroma_u_mask = chroma_u_buffer.data();
+    device_overlay.chroma_v_mask = chroma_v_buffer.data();
+    device_overlay.x = overlay.x;
+    device_overlay.y = overlay.y;
+    device_overlay.width = overlay.width;
+    device_overlay.height = overlay.height;
+    device_overlay.stride = overlay.stride;
+    device_overlay.opacity = overlay.opacity;
+  }
+  return device_overlay;
 }
 
 AVFrame* RenderEngine::allocateHardwareFrame(AVBufferRef* hw_frames_context, int width, int height) const {

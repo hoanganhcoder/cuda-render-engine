@@ -144,7 +144,7 @@ This produces a wheel in `video_engine/dist/` that bundles:
 Install on another Colab session:
 
 ```bash
-pip install /path/to/video_engine/dist/video_engine-0.1.7-*.whl
+pip install /path/to/video_engine/dist/video_engine-0.1.9-*.whl
 ```
 
 Then use it directly:
@@ -160,66 +160,94 @@ print(video_engine.version())
 import video_engine
 
 job = {
-    "input": "input.mp4",
-    "output": "output.mp4",
-    "video_scale": 1.0,
-    "flip_horizontal": False,
-    "subtitle": {
-        "srt": "examples/sample.srt",
-        "gaussian_blur": True,
-        "font": "Noto Sans",
-        "size": 13.0,
-        "bold": True,
-        "italic": True,
-        "upper": False,
-        "color": "#FFF200",
-        "outline_color": "#101010",
-        "back_color": "#00000000",
-        "outline": 4,
-        "shadow": 0,
-        "margin": 12,
-        "regions": [
-            {
-                "start": 1.2,
-                "end": 4.8,
-                "x": 0,
-                "y": 610,
-                "w": 1280,
-                "h": 90,
+    "video_aspect_ratio": "16:9",
+    "output_path": "output.mp4",
+    "bg_color": "#000000",
+    "tracks": [
+        {
+            "type": "video",
+            "path": "input.mp4",
+            "video_scale": 1.0,
+            "flip_horizontal": False,
+            "h": "center",
+            "v": "center",
+            "resize_mode": "fit",
+        },
+        {
+            "type": "subtitle",
+            "srt": "examples/sample.srt",
+            "gaussian_blur": True,
+            "blur": {
                 "strength": 0.85,
                 "feather": 36,
                 "vertical_stretch": 1.0,
                 "horizontal_blur": 0.4,
                 "temporal_blend": 0.18,
-            }
-        ],
-    },
-    "watermark": {
-        "text": "@hoanganhcoder",
-        "font": "Noto Sans",
-        "size": 5.0,
-        "bold": True,
-        "italic": True,
-        "upper": True,
-        "color": "#FFFFFF",
-        "outline_color": "#000000",
-        "bounce": True,
-        "opacity": 0.28,
-    },
-    "logo": {
-        "path": "logo.png",
-        "scale": 0.16,
-        "opacity": 0.24,
-    },
+            },
+            "font": "Noto Sans",
+            "size": 13.0,
+            "bold": True,
+            "italic": True,
+            "upper": False,
+            "color": "#FFF200",
+            "outline_color": "#101010",
+            "back_color": "#00000000",
+            "outline": 4,
+            "shadow": 0,
+            "margin": 12,
+            "regions": [{"x": 0, "y": 610, "w": 1280, "h": 90}],
+        },
+        {
+            "type": "watermark",
+            "text": "@hoanganhcoder",
+            "font": "Noto Sans",
+            "size": 5.0,
+            "bold": True,
+            "italic": True,
+            "upper": True,
+            "color": "#FFFFFF",
+            "outline_color": "#000000",
+            "bounce": True,
+            "opacity": 0.28,
+        },
+        {
+            "type": "logo",
+            "path": "logo.png",
+            "scale": 0.16,
+            "opacity": 0.24,
+            "position": {"x": 0.02, "y": 0.02},
+        },
+        {
+            "type": "gaussian_blur",
+            "strength": 0.85,
+            "feather": 36,
+            "vertical_stretch": 1.0,
+            "horizontal_blur": 0.4,
+            "temporal_blend": 0.18,
+            "regions": [{"start": 0.0, "end": 9999999.0, "x": 1000, "y": 0, "w": 280, "h": 90}],
+        },
+    ],
 }
 
 print(video_engine.version())
 print(video_engine.render(job))
 ```
 
-Nested job layout:
+Track job layout:
 
-- `subtitle.srt` or `subtitle.text`: subtitle source
+- `video_aspect_ratio`: output canvas aspect, for example `16:9` or `9:16`
+- `output_path` or `output`: MP4 output path
+- `bg_color`: background color for `fit` letterbox/pillarbox areas
+- `tracks[*].type="video"`: source video track; requires `path`
+- `tracks[*].resize_mode`: `fit`, `fill`, or `stretch`
+- `tracks[*].h`: `left|center|right`; `tracks[*].v`: `top|center|bottom`
+- `tracks[*].video_scale`: extra center zoom after resize-mode placement
+- `tracks[*].flip_horizontal`: mirror source video
+- `tracks[*].type="subtitle"`: SRT/text subtitle layer plus optional blur
+- `tracks[*].type="gaussian_blur"`: blur-only regions independent of subtitle text
+- `tracks[*].type="watermark"`: moving transparent text watermark
+- `tracks[*].type="logo"`: image overlay; `position.x/y` are relative output coordinates
+- `subtitle.srt` or `subtitle.text`: legacy subtitle source
 - `subtitle.font` or `subtitle.font_ttf`: system font name or explicit `.ttf`
 - when using `subtitle.font_ttf`, that file is treated as the exact face; for best results provide the matching bold/italic face instead of relying on synthetic styles
 - `video_scale`: zoom from center, `1.0` means no zoom, `1.2` means zoom in 20%
@@ -228,7 +256,7 @@ Nested job layout:
 - `subtitle.size` default is `1.5` and `subtitle.italic` default is `true`
 - subtitle text is rendered as an editor-style text box inside `subtitle.regions[*]`
 - `subtitle.wrap`: wrap to the text box width
-- `subtitle.clip`: clip text strictly to the text box bounds
+- `subtitle.clip`: clip text strictly to the text box bounds; default is `false` so multi-line subtitle text can extend beyond region height while remaining vertically centered around the region
 - `subtitle.auto_fit`: shrink text if needed to fit the text box height
 - `subtitle.padding_x`, `subtitle.padding_y`: inner box padding
 - `subtitle.align_h`: `left|center|right`
@@ -253,6 +281,8 @@ Subtitle rendering path:
 
 Editor-style model:
 
+- tracks are evaluated as separate layers: video base, blur/subtitle, then top overlays
+- watermark/logo overlays are composited after blur, so they do not expand blur regions or make subtitle blur persistent
 - `subtitle.regions[*]` defines the subtitle text box
 - text layout uses `wrap/clip/auto_fit/padding/alignment`
 - blur is applied independently through the region mask path (`blur box`)

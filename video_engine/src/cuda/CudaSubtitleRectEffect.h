@@ -31,6 +31,16 @@ struct DeviceSubtitleOverlay {
   }
 };
 
+struct DeviceVideoTransform {
+  float display_x = 0.0f;
+  float display_y = 0.0f;
+  float display_width = 0.0f;
+  float display_height = 0.0f;
+  uint8_t bg_y = 16;
+  uint8_t bg_u = 128;
+  uint8_t bg_v = 128;
+};
+
 class CudaSubtitleRectEffect {
 public:
   static constexpr int kMaxRegions = 64;
@@ -42,6 +52,7 @@ public:
       const std::vector<Region>& active_regions,
       float video_scale,
       bool flip_horizontal,
+      const DeviceVideoTransform& transform,
       bool gaussian_blur,
       const DeviceSubtitleOverlay& text_overlay,
       cudaStream_t stream) const;

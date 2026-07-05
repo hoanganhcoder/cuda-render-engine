@@ -33,10 +33,10 @@ Sequence RenderJobAdapter::toSequence(const video_engine::RenderJob& job) {
   sequence.subtitle.align_h = job.subtitle_align_h;
   sequence.subtitle.align_v = job.subtitle_align_v;
   sequence.subtitle.opacity = job.subtitle_opacity;
-  sequence.subtitle.regions = job.regions;
+  sequence.subtitle.regions = job.subtitle_regions.empty() ? job.regions : job.subtitle_regions;
 
-  sequence.blur_box.enabled = job.subtitle_gaussian_blur;
-  sequence.blur_box.regions = job.regions;
+  sequence.blur_box.enabled = job.subtitle_gaussian_blur || !job.blur_regions.empty();
+  sequence.blur_box.regions = job.blur_regions.empty() ? job.regions : job.blur_regions;
 
   sequence.watermark.enabled = !job.watermark_text.empty() || !job.logo_path.empty();
   return sequence;

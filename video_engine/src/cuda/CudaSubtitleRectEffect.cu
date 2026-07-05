@@ -119,6 +119,66 @@ __device__ int mapOutputToSourceCoord(int coord, int size, float video_scale, bo
   return clampInt(static_cast<int>(mapped + 0.5f), 0, size - 1);
 }
 
+__device__ bool mapOutputToSourcePixel(
+    int x,
+    int y,
+    int src_width,
+    int src_height,
+    const DeviceVideoTransform& transform,
+    bool flip_horizontal,
+    int& sample_x,
+    int& sample_y) {
+  const float normalized_x = (static_cast<float>(x) - transform.display_x) / fmaxf(transform.display_width, 1.0f);
+  const float normalized_y = (static_cast<float>(y) - transform.display_y) / fmaxf(transform.display_height, 1.0f);
+  if (normalized_x < 0.0f || normalized_x > 1.0f || normalized_y < 0.0f || normalized_y > 1.0f) {
+    sample_x = 0;
+    sample_y = 0;
+    return false;
+  }
+  float source_x = normalized_x * static_cast<float>(src_width - 1);
+  if (flip_horizontal) {
+    source_x = static_cast<float>(src_width - 1) - source_x;
+  }
+  const float source_y = normalized_y * static_cast<float>(src_height - 1);
+  sample_x = clampInt(static_cast<int>(source_x + 0.5f), 0, src_width - 1);
+  sample_y = clampInt(static_cast<int>(source_y + 0.5f), 0, src_height - 1);
+  return true;
+}
+
+__device__ float sampleBaseLuma(
+    const uint8_t* source_y,
+    int pitch_y,
+    int src_width,
+    int src_height,
+    int x,
+    int y,
+    const DeviceVideoTransform& transform,
+    bool flip_horizontal) {
+  int sample_x = 0;
+  int sample_y = 0;
+  if (!mapOutputToSourcePixel(x, y, src_width, src_height, transform, flip_horizontal, sample_x, sample_y)) {
+    return normalizeByte(transform.bg_y);
+  }
+  return normalizeByte(loadLuma(source_y, pitch_y, src_width, src_height, sample_x, sample_y));
+}
+
+__device__ uchar2 sampleBaseChroma(
+    const uint8_t* source_uv,
+    int pitch_uv,
+    int src_width,
+    int src_height,
+    int x,
+    int y,
+    const DeviceVideoTransform& transform,
+    bool flip_horizontal) {
+  int sample_x = 0;
+  int sample_y = 0;
+  if (!mapOutputToSourcePixel(x, y, src_width, src_height, transform, flip_horizontal, sample_x, sample_y)) {
+    return make_uchar2(transform.bg_u, transform.bg_v);
+  }
+  return loadChroma(source_uv, pitch_uv, src_width / 2, src_height / 2, sample_x / 2, sample_y / 2);
+}
+
 __device__ float gaussianWeightX1D(int offset) {
   return kGaussianWeightsX[abs(offset)];
 }
@@ -165,7 +225,7 @@ __global__ void downsampleLumaKernel(
     int small_width,
     int small_height,
     int downscale,
-    float video_scale,
+    DeviceVideoTransform transform,
     bool flip_horizontal) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -179,11 +239,9 @@ __global__ void downsampleLumaKernel(
   const int base_y = origin_y + y * downscale;
   for (int yy = 0; yy < downscale; ++yy) {
     const int full_y = min(origin_y + roi_height - 1, base_y + yy);
-    const int sample_y = mapOutputToSourceCoord(full_y, height, video_scale, false, false);
     for (int xx = 0; xx < downscale; ++xx) {
       const int full_x = min(origin_x + roi_width - 1, base_x + xx);
-      const int sample_x = mapOutputToSourceCoord(full_x, width, video_scale, flip_horizontal, true);
-      accum += normalizeByte(loadLuma(source_y, pitch_y, width, height, sample_x, sample_y));
+      accum += sampleBaseLuma(source_y, pitch_y, width, height, full_x, full_y, transform, flip_horizontal);
       count += 1.0f;
     }
   }
@@ -285,7 +343,7 @@ __global__ void downsampleChromaKernel(
     int small_width,
     int small_height,
     int downscale,
-    float video_scale,
+    DeviceVideoTransform transform,
     bool flip_horizontal) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -300,11 +358,10 @@ __global__ void downsampleChromaKernel(
   const int base_y = origin_y + y * downscale;
   for (int yy = 0; yy < downscale; ++yy) {
     const int full_y = min(origin_y + roi_height - 1, base_y + yy);
-    const int sample_y = mapOutputToSourceCoord(full_y * 2, chroma_height * 2, video_scale, false, false) / 2;
     for (int xx = 0; xx < downscale; ++xx) {
       const int full_x = min(origin_x + roi_width - 1, base_x + xx);
-      const int sample_x = mapOutputToSourceCoord(full_x * 2, chroma_width * 2, video_scale, flip_horizontal, true) / 2;
-      const uchar2 sample = loadChroma(source_uv, pitch_uv, chroma_width, chroma_height, sample_x, sample_y);
+      const uchar2 sample =
+          sampleBaseChroma(source_uv, pitch_uv, chroma_width * 2, chroma_height * 2, full_x * 2, full_y * 2, transform, flip_horizontal);
       accum_u += normalizeByte(sample.x);
       accum_v += normalizeByte(sample.y);
       count += 1.0f;
@@ -430,20 +487,20 @@ __global__ void subtitleRectLumaKernel(
     const uint8_t* source_y,
     uint8_t* output_y,
     int pitch_y,
-    int width,
-    int height,
-    float video_scale,
+    int src_width,
+    int src_height,
+    int dst_width,
+    int dst_height,
+    DeviceVideoTransform transform,
     bool flip_horizontal,
     DeviceSubtitleOverlay overlay) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
-  if (x >= width || y >= height) {
+  if (x >= dst_width || y >= dst_height) {
     return;
   }
 
-  const int mapped_x = mapOutputToSourceCoord(x, width, video_scale, flip_horizontal, true);
-  const int mapped_y = mapOutputToSourceCoord(y, height, video_scale, false, false);
-  float current = normalizeByte(loadLuma(source_y, pitch_y, width, height, mapped_x, mapped_y));
+  float current = sampleBaseLuma(source_y, pitch_y, src_width, src_height, x, y, transform, flip_horizontal);
   const float overlay_alpha = sampleOverlayAlpha(overlay, x, y);
   if (overlay_alpha > 0.0f) {
     current = mixFloat(current, normalizeByte(sampleOverlayMaskValue(overlay.luma_mask, overlay, x, y)), overlay_alpha);
@@ -456,22 +513,22 @@ __global__ void subtitleRectChromaKernel(
     const uint8_t* source_uv,
     uint8_t* output_uv,
     int pitch_uv,
-    int width,
-    int height,
-    float video_scale,
+    int src_width,
+    int src_height,
+    int dst_width,
+    int dst_height,
+    DeviceVideoTransform transform,
     bool flip_horizontal,
     DeviceSubtitleOverlay overlay) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
-  const int chroma_width = width / 2;
-  const int chroma_height = height / 2;
-  if (x >= chroma_width || y >= chroma_height) {
+  const int dst_chroma_width = dst_width / 2;
+  const int dst_chroma_height = dst_height / 2;
+  if (x >= dst_chroma_width || y >= dst_chroma_height) {
     return;
   }
 
-  const int mapped_x = mapOutputToSourceCoord(x * 2, width, video_scale, flip_horizontal, true) / 2;
-  const int mapped_y = mapOutputToSourceCoord(y * 2, height, video_scale, false, false) / 2;
-  uchar2 current = loadChroma(source_uv, pitch_uv, chroma_width, chroma_height, mapped_x, mapped_y);
+  uchar2 current = sampleBaseChroma(source_uv, pitch_uv, src_width, src_height, x * 2, y * 2, transform, flip_horizontal);
   float current_u = normalizeByte(current.x);
   float current_v = normalizeByte(current.y);
   const int full_x = x * 2;
@@ -502,11 +559,14 @@ void CudaSubtitleRectEffect::apply(
     const std::vector<Region>& active_regions,
     float video_scale,
     bool flip_horizontal,
+    const DeviceVideoTransform& transform,
     bool gaussian_blur,
     const DeviceSubtitleOverlay& text_overlay,
     cudaStream_t stream) const {
   const int width = source_frame->width;
   const int height = source_frame->height;
+  const int output_width = output_frame->width;
+  const int output_height = output_frame->height;
   uint8_t* output_y = output_frame->data[0];
   uint8_t* output_uv = output_frame->data[1];
   const uint8_t* source_y = source_frame->data[0];
@@ -544,12 +604,12 @@ void CudaSubtitleRectEffect::apply(
   }
 
   dim3 block(16, 16);
-  dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
+  dim3 grid((output_width + block.x - 1) / block.x, (output_height + block.y - 1) / block.y);
   if (gaussian_blur && region_count > 0) {
     int max_radius_x = 0;
     int max_radius_y = 0;
-    int roi_x0 = width;
-    int roi_y0 = height;
+    int roi_x0 = output_width;
+    int roi_y0 = output_height;
     int roi_x1 = 0;
     int roi_y1 = 0;
     for (int i = 0; i < region_count; ++i) {
@@ -562,8 +622,8 @@ void CudaSubtitleRectEffect::apply(
       const int expand_y = max(2, static_cast<int>(region.feather * 0.75f) + max(2, radius_y * 2));
       roi_x0 = min(roi_x0, max(0, region.x - expand_x));
       roi_y0 = min(roi_y0, max(0, region.y - expand_y));
-      roi_x1 = max(roi_x1, min(width, region.x + region.w + expand_x));
-      roi_y1 = max(roi_y1, min(height, region.y + region.h + expand_y));
+      roi_x1 = max(roi_x1, min(output_width, region.x + region.w + expand_x));
+      roi_y1 = max(roi_y1, min(output_height, region.y + region.h + expand_y));
     }
 
     if (roi_x1 <= roi_x0 || roi_y1 <= roi_y0) {
@@ -577,15 +637,18 @@ void CudaSubtitleRectEffect::apply(
 
     const bool can_copy_base_frame =
         video_scale <= 1.0001f && !flip_horizontal && overlayInsideRect(text_overlay, roi_x0, roi_y0, roi_x1, roi_y1);
-    if (can_copy_base_frame) {
+    if (can_copy_base_frame && width == output_width && height == output_height &&
+        fabsf(transform.display_x) < 0.01f && fabsf(transform.display_y) < 0.01f &&
+        fabsf(transform.display_width - static_cast<float>(output_width)) < 0.01f &&
+        fabsf(transform.display_height - static_cast<float>(output_height)) < 0.01f) {
       throwOnCudaError(
           cudaMemcpy2DAsync(
               output_y,
               output_frame->linesize[0],
               source_y,
-              source_frame->linesize[0],
-              static_cast<size_t>(width),
-              static_cast<size_t>(height),
+          source_frame->linesize[0],
+          static_cast<size_t>(output_width),
+          static_cast<size_t>(output_height),
               cudaMemcpyDeviceToDevice,
               stream),
           "Failed to copy luma plane on GPU");
@@ -594,9 +657,9 @@ void CudaSubtitleRectEffect::apply(
               output_uv,
               output_frame->linesize[1],
               source_uv,
-              source_frame->linesize[1],
-              static_cast<size_t>(width),
-              static_cast<size_t>(height / 2),
+          source_frame->linesize[1],
+          static_cast<size_t>(output_width),
+          static_cast<size_t>(output_height / 2),
               cudaMemcpyDeviceToDevice,
               stream),
           "Failed to copy chroma plane on GPU");
@@ -607,17 +670,21 @@ void CudaSubtitleRectEffect::apply(
           source_frame->linesize[0],
           width,
           height,
-          video_scale,
+          output_width,
+          output_height,
+          transform,
           flip_horizontal,
           text_overlay);
-      dim3 base_chroma_grid(((width / 2) + block.x - 1) / block.x, ((height / 2) + block.y - 1) / block.y);
+      dim3 base_chroma_grid(((output_width / 2) + block.x - 1) / block.x, ((output_height / 2) + block.y - 1) / block.y);
       subtitleRectChromaKernel<<<base_chroma_grid, block, 0, stream>>>(
           source_uv,
           output_uv,
           source_frame->linesize[1],
           width,
           height,
-          video_scale,
+          output_width,
+          output_height,
+          transform,
           flip_horizontal,
           text_overlay);
     }
@@ -668,7 +735,7 @@ void CudaSubtitleRectEffect::apply(
         small_luma_width,
         small_luma_height,
         luma_downscale,
-        video_scale,
+        transform,
         flip_horizontal);
     blurSmallLumaHorizontalKernel<<<small_luma_grid, block, 0, stream>>>(
         temp_luma_.data(),
@@ -681,8 +748,8 @@ void CudaSubtitleRectEffect::apply(
         previous_y,
         output_y,
         source_frame->linesize[0],
-        width,
-        height,
+        output_width,
+        output_height,
         roi_x0,
         roi_y0,
         roi_width,
@@ -696,6 +763,8 @@ void CudaSubtitleRectEffect::apply(
 
     const int chroma_width = width / 2;
     const int chroma_height = height / 2;
+    const int output_chroma_width = output_width / 2;
+    const int output_chroma_height = output_height / 2;
     const int chroma_roi_x0 = roi_x0 / 2;
     const int chroma_roi_y0 = roi_y0 / 2;
     const int chroma_roi_x1 = (roi_x1 + 1) / 2;
@@ -728,7 +797,7 @@ void CudaSubtitleRectEffect::apply(
           small_chroma_width,
           small_chroma_height,
           chroma_downscale,
-          video_scale,
+          transform,
           flip_horizontal);
       blurSmallChromaHorizontalKernel<<<small_chroma_grid, block, 0, stream>>>(
           temp_chroma_.data(),
@@ -741,8 +810,8 @@ void CudaSubtitleRectEffect::apply(
           previous_uv,
           output_uv,
           source_frame->linesize[1],
-          chroma_width,
-          chroma_height,
+          output_chroma_width,
+          output_chroma_height,
           chroma_roi_x0,
           chroma_roi_y0,
           chroma_roi_width,
@@ -761,17 +830,21 @@ void CudaSubtitleRectEffect::apply(
         source_frame->linesize[0],
         width,
         height,
-        video_scale,
+        output_width,
+        output_height,
+        transform,
         flip_horizontal,
         text_overlay);
-    dim3 chroma_grid(((width / 2) + block.x - 1) / block.x, ((height / 2) + block.y - 1) / block.y);
+    dim3 chroma_grid(((output_width / 2) + block.x - 1) / block.x, ((output_height / 2) + block.y - 1) / block.y);
     subtitleRectChromaKernel<<<chroma_grid, block, 0, stream>>>(
         source_uv,
         output_uv,
         source_frame->linesize[1],
         width,
         height,
-        video_scale,
+        output_width,
+        output_height,
+        transform,
         flip_horizontal,
         text_overlay);
   }

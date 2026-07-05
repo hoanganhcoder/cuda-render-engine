@@ -16,7 +16,7 @@ BUILD_CANDIDATES = (
     ROOT / "build_ninja",
     ROOT / "build_vs",
 )
-VERSION = "0.1.7"
+VERSION = "0.1.9"
 
 
 def _find_native_module() -> Path:

@@ -20,6 +20,7 @@ public:
 
   void open(const std::string& output_path, int width, int height, double fps, AVBufferRef* hw_device_context,
             AVBufferRef* hw_frames_context);
+  [[nodiscard]] AVBufferRef* hwFramesContext() const { return hw_frames_context_; }
   void write(AVFrame* frame);
   void close();
 

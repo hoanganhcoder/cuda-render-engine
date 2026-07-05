@@ -46,7 +46,9 @@ void SubtitleLayerRenderer::initialize(const RenderJob& job, int video_width, in
 
 std::vector<SubtitleOverlay> SubtitleLayerRenderer::render(double timestamp_seconds) const {
   std::vector<SubtitleOverlay> overlays;
-  const std::vector<Region> active_regions = collectActiveRegions(impl_->job.regions, timestamp_seconds);
+  const std::vector<Region>& configured_regions =
+      impl_->job.subtitle_regions.empty() ? impl_->job.regions : impl_->job.subtitle_regions;
+  const std::vector<Region> active_regions = collectActiveRegions(configured_regions, timestamp_seconds);
   if (active_regions.empty()) {
     return overlays;
   }

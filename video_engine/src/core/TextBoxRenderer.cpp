@@ -619,7 +619,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 #if defined(VIDEO_ENGINE_HAS_PANGO)
   if (impl_->prefer_pango) {
     const int surface_width = anchor_region->w;
-    const int surface_height = anchor_region->h;
+    const int surface_height = impl_->job.subtitle_clip ? anchor_region->h : impl_->video_height;
     if (surface_width <= 0 || surface_height <= 0) {
       return overlay;
     }
@@ -689,12 +689,26 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
     std::string align_v = impl_->job.subtitle_align_v;
     std::transform(align_v.begin(), align_v.end(), align_v.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    const int overlay_y = impl_->job.subtitle_clip
+                              ? anchor_region->y
+                              : std::clamp(anchor_region->y + (anchor_region->h - surface_height) / 2, 0, std::max(0, impl_->video_height - surface_height));
     double origin_x = static_cast<double>(side_padding);
     double origin_y = static_cast<double>(top_padding);
-    if (align_v == "middle") {
-      origin_y += std::max(usable_height - layout_height, 0) * 0.5;
-    } else if (align_v == "bottom") {
-      origin_y += std::max(usable_height - layout_height, 0);
+    if (impl_->job.subtitle_clip) {
+      if (align_v == "middle") {
+        origin_y += std::max(usable_height - layout_height, 0) * 0.5;
+      } else if (align_v == "bottom") {
+        origin_y += std::max(usable_height - layout_height, 0);
+      }
+    } else {
+      const double region_top = static_cast<double>(anchor_region->y - overlay_y);
+      if (align_v == "middle") {
+        origin_y = region_top + (static_cast<double>(anchor_region->h) - static_cast<double>(layout_height)) * 0.5;
+      } else if (align_v == "bottom") {
+        origin_y = region_top + static_cast<double>(anchor_region->h - layout_height - top_padding);
+      } else {
+        origin_y = region_top + static_cast<double>(top_padding);
+      }
     }
 
     const RgbaColor fill_color = parseHexColor(impl_->job.subtitle_text_color);
@@ -733,7 +747,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
 
     overlay.enabled = true;
     overlay.x = anchor_region->x;
-    overlay.y = anchor_region->y;
+    overlay.y = overlay_y;
     overlay.width = surface_width;
     overlay.height = surface_height;
     overlay.stride = surface_width;

@@ -331,18 +331,33 @@ std::vector<SubtitleOverlay> OverlayLayerRenderer::render(double timestamp_secon
   std::vector<SubtitleOverlay> overlays;
 
   if (impl_->logo_enabled && impl_->logo_image.width > 0 && impl_->logo_image.height > 0) {
-    const Region logo_region = makeMotionRegion(
-        impl_->video_width,
-        impl_->video_height,
-        impl_->logo_image.width,
-        impl_->logo_image.height,
-        impl_->source_job.logo_margin,
-        impl_->source_job.logo_bounce,
-        impl_->source_job.logo_speed_x,
-        impl_->source_job.logo_speed_y,
-        timestamp_seconds,
-        17,
-        29);
+    Region logo_region;
+    if (!impl_->source_job.logo_bounce && impl_->source_job.logo_position_x >= 0.0f &&
+        impl_->source_job.logo_position_y >= 0.0f) {
+      logo_region.w = impl_->logo_image.width;
+      logo_region.h = impl_->logo_image.height;
+      logo_region.x = std::clamp(
+          static_cast<int>(std::llround(impl_->source_job.logo_position_x * static_cast<float>(impl_->video_width))),
+          0,
+          std::max(impl_->video_width - logo_region.w, 0));
+      logo_region.y = std::clamp(
+          static_cast<int>(std::llround(impl_->source_job.logo_position_y * static_cast<float>(impl_->video_height))),
+          0,
+          std::max(impl_->video_height - logo_region.h, 0));
+    } else {
+      logo_region = makeMotionRegion(
+          impl_->video_width,
+          impl_->video_height,
+          impl_->logo_image.width,
+          impl_->logo_image.height,
+          impl_->source_job.logo_margin,
+          impl_->source_job.logo_bounce,
+          impl_->source_job.logo_speed_x,
+          impl_->source_job.logo_speed_y,
+          timestamp_seconds,
+          17,
+          29);
+    }
     overlays.push_back(logoToOverlay(impl_->logo_image, logo_region, impl_->source_job.logo_opacity));
   }
 

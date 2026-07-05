@@ -40,13 +40,24 @@ FFmpegEncoder::~FFmpegEncoder() {
 void FFmpegEncoder::open(const std::string& output_path, int width, int height, double fps, AVBufferRef* hw_device_context,
                          AVBufferRef* hw_frames_context) {
   close();
+  (void)hw_frames_context;
 
   width_ = width;
   height_ = height;
   fps_ = fps > 0.0 ? fps : 30.0;
   next_pts_ = 0;
   hw_device_context_ = av_buffer_ref(hw_device_context);
-  hw_frames_context_ = av_buffer_ref(hw_frames_context);
+  hw_frames_context_ = av_hwframe_ctx_alloc(hw_device_context_);
+  if (!hw_frames_context_) {
+    throw std::runtime_error("Failed to allocate encoder CUDA hw frames context.");
+  }
+  auto* frames_context = reinterpret_cast<AVHWFramesContext*>(hw_frames_context_->data);
+  frames_context->format = AV_PIX_FMT_CUDA;
+  frames_context->sw_format = AV_PIX_FMT_NV12;
+  frames_context->width = width_;
+  frames_context->height = height_;
+  frames_context->initial_pool_size = 8;
+  throwOnError(av_hwframe_ctx_init(hw_frames_context_), "Failed to initialize encoder CUDA hw frames context");
 
   throwOnError(avformat_alloc_output_context2(&format_context_, nullptr, nullptr, output_path.c_str()),
                "Failed to create output format context");

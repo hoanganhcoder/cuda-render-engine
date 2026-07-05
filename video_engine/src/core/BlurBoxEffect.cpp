@@ -29,6 +29,7 @@ void BlurBoxEffect::apply(
     const std::vector<Region>& active_regions,
     float video_scale,
     bool flip_horizontal,
+    const DeviceVideoTransform& transform,
     const DeviceSubtitleOverlay& text_overlay,
     cudaStream_t stream) const {
   cuda_effect_.apply(
@@ -38,6 +39,7 @@ void BlurBoxEffect::apply(
       active_regions,
       video_scale,
       flip_horizontal,
+      transform,
       sequence_.blur_box.enabled,
       text_overlay,
       stream);

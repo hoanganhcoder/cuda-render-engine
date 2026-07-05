@@ -16,8 +16,13 @@ struct RenderJob {
   int width = 0;
   int height = 0;
   double fps = 0.0;
+  std::string video_aspect_ratio = "16:9";
+  std::string bg_color = "#000000";
   float video_scale = 1.0f;
   bool flip_horizontal = false;
+  std::string video_align_h = "center";
+  std::string video_align_v = "center";
+  std::string resize_mode = "fit";
   bool subtitle_gaussian_blur = true;
   std::string subtitle_srt;
   std::string subtitle_text;
@@ -36,7 +41,7 @@ struct RenderJob {
   bool subtitle_uppercase = false;
   float subtitle_opacity = 1.0f;
   bool subtitle_wrap = true;
-  bool subtitle_clip = true;
+  bool subtitle_clip = false;
   bool subtitle_auto_fit = true;
   int subtitle_padding_x = 0;
   int subtitle_padding_y = 0;
@@ -49,6 +54,8 @@ struct RenderJob {
   bool logo_bounce = false;
   float logo_speed_x = 72.0f;
   float logo_speed_y = 48.0f;
+  float logo_position_x = -1.0f;
+  float logo_position_y = -1.0f;
   std::string watermark_text;
   std::string watermark_font_family = "Noto Sans";
   std::string watermark_font_path;
@@ -67,6 +74,8 @@ struct RenderJob {
   float watermark_speed_y = 64.0f;
   float watermark_opacity = 0.28f;
   std::vector<Region> regions;
+  std::vector<Region> subtitle_regions;
+  std::vector<Region> blur_regions;
 
   static RenderJob fromPythonDict(const pybind11::dict& job_dict);
   void validate() const;
