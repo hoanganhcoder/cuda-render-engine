@@ -75,6 +75,21 @@ void FFmpegDecoder::open(const std::string& input_path) {
   Logger::info("NVDEC decoder opened.");
 }
 
+void FFmpegDecoder::seek(double timestamp_seconds) {
+  if (!format_context_ || !codec_context_ || video_stream_index_ < 0) {
+    throw std::runtime_error("Decoder must be opened before seeking.");
+  }
+  const AVStream* stream = format_context_->streams[video_stream_index_];
+  const int64_t timestamp = static_cast<int64_t>(timestamp_seconds / av_q2d(stream->time_base));
+  avcodec_flush_buffers(codec_context_);
+  av_packet_unref(packet_);
+  av_frame_unref(decoded_frame_);
+  flushing_ = false;
+  throwOnError(
+      av_seek_frame(format_context_, video_stream_index_, timestamp, AVSEEK_FLAG_BACKWARD),
+      "Failed to seek input video");
+}
+
 bool FFmpegDecoder::read(AVFrame*& frame, double& timestamp_seconds) {
   auto receive_frame = [&]() -> int {
     const int receive_result = avcodec_receive_frame(codec_context_, decoded_frame_);

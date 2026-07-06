@@ -75,6 +75,7 @@ def _load_native_module():
 _native = _load_native_module()
 
 render = _native.render
+render_frame = _native.render_frame
 version = _native.version
 
-__all__ = ["render", "version"]
+__all__ = ["render", "render_frame", "version"]

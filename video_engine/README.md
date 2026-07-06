@@ -144,7 +144,7 @@ This produces a wheel in `video_engine/dist/` that bundles:
 Install on another Colab session:
 
 ```bash
-pip install /path/to/video_engine/dist/video_engine-0.2.5-*.whl
+pip install /path/to/video_engine/dist/video_engine-0.3.0-*.whl
 ```
 
 Then use it directly:
@@ -240,6 +240,17 @@ job = {
 print(video_engine.version())
 print(video_engine.render(job))
 ```
+
+Preview one rendered frame for editor UI:
+
+```python
+preview = video_engine.render_frame(job, 12.5)
+rgba = preview["rgba"]  # numpy uint8 array, shape: (height, width, 4)
+print(preview["timestamp"], rgba.shape)
+```
+
+`render_frame` uses the same GPU decode/render/composite path, then downloads only the requested frame as RGBA for preview.
+It is intended for UI/editor previews, not the hot encode path.
 
 Track job layout:
 

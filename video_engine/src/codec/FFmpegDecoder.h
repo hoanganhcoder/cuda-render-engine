@@ -19,6 +19,7 @@ public:
   FFmpegDecoder& operator=(const FFmpegDecoder&) = delete;
 
   void open(const std::string& input_path);
+  void seek(double timestamp_seconds);
   bool read(AVFrame*& frame, double& timestamp_seconds);
   void close();
 

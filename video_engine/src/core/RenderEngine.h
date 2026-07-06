@@ -1,8 +1,10 @@
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
 extern "C" {
+#include <libavutil/buffer.h>
 #include <libavutil/frame.h>
 }
 
@@ -19,10 +21,18 @@ extern "C" {
 
 namespace video_engine {
 
+struct RenderedFrame {
+  int width = 0;
+  int height = 0;
+  double timestamp_seconds = 0.0;
+  std::vector<uint8_t> rgba;
+};
+
 class RenderEngine {
 public:
   RenderEngine();
   bool render(const RenderJob& job);
+  RenderedFrame renderFrame(const RenderJob& job, double seek_seconds);
 
 private:
   static constexpr int kLogFrameInterval = 100;

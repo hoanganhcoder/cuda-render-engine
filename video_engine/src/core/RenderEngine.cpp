@@ -9,6 +9,8 @@
 #include <string>
 
 #include <libavutil/hwcontext.h>
+#include <libavutil/imgutils.h>
+#include <libswscale/swscale.h>
 
 #include "core/Logger.h"
 #include "core/timeline/RenderJobAdapter.h"
@@ -260,6 +262,77 @@ bool sameUploadedOverlay(const SubtitleOverlay& previous, const SubtitleOverlay&
          previous.chroma_v_mask.size() == current.chroma_v_mask.size();
 }
 
+AVBufferRef* createCudaFramesContext(AVBufferRef* device_context, int width, int height) {
+  AVBufferRef* frames_context_ref = av_hwframe_ctx_alloc(device_context);
+  if (!frames_context_ref) {
+    throw std::runtime_error("Failed to allocate preview CUDA frames context.");
+  }
+  auto* frames_context = reinterpret_cast<AVHWFramesContext*>(frames_context_ref->data);
+  frames_context->format = AV_PIX_FMT_CUDA;
+  frames_context->sw_format = AV_PIX_FMT_NV12;
+  frames_context->width = width;
+  frames_context->height = height;
+  frames_context->initial_pool_size = 2;
+  const int result = av_hwframe_ctx_init(frames_context_ref);
+  if (result < 0) {
+    av_buffer_unref(&frames_context_ref);
+    throw std::runtime_error("Failed to initialize preview CUDA frames context.");
+  }
+  return frames_context_ref;
+}
+
+RenderedFrame downloadRgbaFrame(const AVFrame* cuda_frame, double timestamp_seconds) {
+  AVFrame* nv12_frame = av_frame_alloc();
+  SwsContext* sws_context = nullptr;
+  auto cleanup = [&]() {
+    sws_freeContext(sws_context);
+    av_frame_free(&nv12_frame);
+  };
+  if (!nv12_frame) {
+    throw std::runtime_error("Failed to allocate preview CPU frame.");
+  }
+  const int transfer_result = av_hwframe_transfer_data(nv12_frame, cuda_frame, 0);
+  if (transfer_result < 0) {
+    cleanup();
+    throw std::runtime_error("Failed to download preview frame from CUDA.");
+  }
+
+  RenderedFrame frame;
+  frame.width = cuda_frame->width;
+  frame.height = cuda_frame->height;
+  frame.timestamp_seconds = timestamp_seconds;
+  frame.rgba.resize(static_cast<size_t>(frame.width) * static_cast<size_t>(frame.height) * 4U);
+
+  uint8_t* dest_data[4] = {};
+  int dest_linesize[4] = {};
+  av_image_fill_arrays(dest_data, dest_linesize, frame.rgba.data(), AV_PIX_FMT_RGBA, frame.width, frame.height, 1);
+  sws_context = sws_getContext(
+      frame.width,
+      frame.height,
+      static_cast<AVPixelFormat>(nv12_frame->format),
+      frame.width,
+      frame.height,
+      AV_PIX_FMT_RGBA,
+      SWS_BILINEAR,
+      nullptr,
+      nullptr,
+      nullptr);
+  if (!sws_context) {
+    cleanup();
+    throw std::runtime_error("Failed to create preview swscale context.");
+  }
+  sws_scale(
+      sws_context,
+      nv12_frame->data,
+      nv12_frame->linesize,
+      0,
+      frame.height,
+      dest_data,
+      dest_linesize);
+  cleanup();
+  return frame;
+}
+
 }  // namespace
 
 RenderEngine::RenderEngine() {
@@ -433,6 +506,127 @@ bool RenderEngine::render(const RenderJob& input_job) {
     Logger::error(error.what());
     return false;
   }
+}
+
+RenderedFrame RenderEngine::renderFrame(const RenderJob& input_job, double seek_seconds) {
+  AVFrame* output_frame = nullptr;
+  AVBufferRef* preview_frames_context = nullptr;
+  try {
+    RenderJob job = input_job;
+    FFmpegDecoder decoder;
+    decoder.open(job.input);
+    if (job.width <= 0 && job.height <= 0) {
+      job.height = decoder.height();
+      job.width = makeEven(static_cast<int>(std::lround(static_cast<double>(job.height) * parseAspectRatio(job.video_aspect_ratio))));
+    } else if (job.width <= 0) {
+      job.width = makeEven(static_cast<int>(std::lround(static_cast<double>(job.height) * parseAspectRatio(job.video_aspect_ratio))));
+    } else if (job.height <= 0) {
+      job.height = makeEven(static_cast<int>(std::lround(static_cast<double>(job.width) / parseAspectRatio(job.video_aspect_ratio))));
+    }
+    if (job.fps <= 0.0) {
+      job.fps = decoder.fps();
+    }
+    if (job.width <= 0 || job.height <= 0 || job.fps <= 0.0) {
+      throw std::runtime_error("Unable to determine preview width/height/fps from job or decoder.");
+    }
+
+    for (Region& region : job.regions) {
+      region.clampToBounds(job.width, job.height);
+    }
+    for (Region& region : job.subtitle_regions) {
+      region.clampToBounds(job.width, job.height);
+    }
+    for (Region& region : job.blur_regions) {
+      region.clampToBounds(job.width, job.height);
+    }
+
+    const timeline::Sequence sequence_input = timeline::RenderJobAdapter::toSequence(job);
+    blur_box_effect_.initialize(sequence_input);
+    current_job_ = job;
+    current_video_width_ = job.width;
+    current_video_height_ = job.height;
+    subtitle_layer_renderer_.initialize(job, job.width, job.height);
+    overlay_layer_renderer_.initialize(job, job.width, job.height);
+    const DeviceVideoTransform video_transform =
+        makeVideoTransform(job, decoder.width(), decoder.height(), job.width, job.height);
+
+    if (seek_seconds > 0.0) {
+      decoder.seek(seek_seconds);
+    }
+
+    AVFrame* decoded_frame = nullptr;
+    double timestamp_seconds = 0.0;
+    bool found_frame = false;
+    while (decoder.read(decoded_frame, timestamp_seconds)) {
+      if (timestamp_seconds + (0.5 / std::max(job.fps, 1.0)) >= seek_seconds) {
+        found_frame = true;
+        break;
+      }
+    }
+    if (!found_frame) {
+      throw std::runtime_error("Failed to decode a preview frame at requested time.");
+    }
+    if (!decoded_frame->hw_frames_ctx) {
+      throw std::runtime_error("Preview decoded frame does not carry CUDA hardware frames context.");
+    }
+    if (decoder.softwarePixelFormat() != AV_PIX_FMT_NV12) {
+      throw std::runtime_error("Preview path currently expects NVDEC to output NV12 surfaces.");
+    }
+
+    preview_frames_context = createCudaFramesContext(decoder.hwDeviceContext(), job.width, job.height);
+    output_frame = allocateHardwareFrame(preview_frames_context, job.width, job.height);
+
+    const std::vector<Region> active_blur_regions = blur_box_effect_.collectActiveRegions(timestamp_seconds);
+    const SubtitleOverlay subtitle_overlay = buildSubtitleOverlay(timestamp_seconds);
+    const SubtitleOverlay top_overlay = buildTopOverlay(timestamp_seconds);
+    SubtitleOverlay uploaded_subtitle_overlay;
+    bool has_uploaded_subtitle_overlay = false;
+    SubtitleOverlay uploaded_top_overlay;
+    bool has_uploaded_top_overlay = false;
+    DeviceSubtitleOverlay subtitle_device_overlay = uploadOverlay(
+        subtitle_overlay,
+        uploaded_subtitle_overlay,
+        has_uploaded_subtitle_overlay,
+        subtitle_mask_buffer_,
+        subtitle_luma_buffer_,
+        subtitle_chroma_u_buffer_,
+        subtitle_chroma_v_buffer_);
+    DeviceSubtitleOverlay top_device_overlay = uploadOverlay(
+        top_overlay,
+        uploaded_top_overlay,
+        has_uploaded_top_overlay,
+        overlay_mask_buffer_,
+        overlay_luma_buffer_,
+        overlay_chroma_u_buffer_,
+        overlay_chroma_v_buffer_);
+
+    blur_box_effect_.apply(
+        decoded_frame,
+        nullptr,
+        output_frame,
+        active_blur_regions,
+        1.0f,
+        job.flip_horizontal,
+        video_transform,
+        cuda_context_.stream());
+    if (subtitle_device_overlay.enabled()) {
+      overlay_composite_effect_.apply(output_frame, subtitle_device_overlay, cuda_context_.stream());
+    }
+    if (top_device_overlay.enabled()) {
+      overlay_composite_effect_.apply(output_frame, top_device_overlay, cuda_context_.stream());
+    }
+    cuda_context_.synchronize("Failed to synchronize CUDA stream before downloading preview frame.");
+    RenderedFrame frame = downloadRgbaFrame(output_frame, timestamp_seconds);
+
+    av_frame_free(&output_frame);
+    av_buffer_unref(&preview_frames_context);
+    return frame;
+  } catch (const std::exception& error) {
+    av_frame_free(&output_frame);
+    av_buffer_unref(&preview_frames_context);
+    Logger::error(error.what());
+  }
+  return RenderedFrame{};
 }
 
 SubtitleOverlay RenderEngine::buildSubtitleOverlay(double timestamp_seconds) const {
