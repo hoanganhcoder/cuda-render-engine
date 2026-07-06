@@ -13,6 +13,7 @@ public:
   CudaContext& operator=(const CudaContext&) = delete;
 
   void initialize();
+  void synchronize(const char* message) const;
   [[nodiscard]] cudaStream_t stream() const { return stream_; }
 
 private:

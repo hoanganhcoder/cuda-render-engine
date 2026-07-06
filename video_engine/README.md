@@ -144,7 +144,7 @@ This produces a wheel in `video_engine/dist/` that bundles:
 Install on another Colab session:
 
 ```bash
-pip install /path/to/video_engine/dist/video_engine-0.2.4-*.whl
+pip install /path/to/video_engine/dist/video_engine-0.2.5-*.whl
 ```
 
 Then use it directly:

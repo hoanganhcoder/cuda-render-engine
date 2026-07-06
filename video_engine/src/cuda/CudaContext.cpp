@@ -33,4 +33,10 @@ void CudaContext::initialize() {
   initialized_ = true;
 }
 
+void CudaContext::synchronize(const char* message) const {
+  if (stream_) {
+    throwOnCudaError(cudaStreamSynchronize(stream_), message);
+  }
+}
+
 }  // namespace video_engine

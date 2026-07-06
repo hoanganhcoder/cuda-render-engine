@@ -382,6 +382,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
           video_transform,
           cuda_context_.stream());
       if (use_previous_frame_history) {
+        cuda_context_.synchronize("Failed to synchronize CUDA stream before updating blur history.");
         cloneFrameTo(previous_frame, output_frame);
       }
       if (subtitle_device_overlay.enabled()) {
@@ -390,6 +391,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
       if (top_device_overlay.enabled()) {
         overlay_composite_effect_.apply(output_frame, top_device_overlay, cuda_context_.stream());
       }
+      cuda_context_.synchronize("Failed to synchronize CUDA stream before NVENC reads the frame.");
       interval_timers.effect_seconds += elapsedSecondsSince(effect_start_time);
       output_frame->format = AV_PIX_FMT_CUDA;
       output_frame->width = job.width;
