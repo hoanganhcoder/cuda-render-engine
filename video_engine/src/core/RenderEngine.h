@@ -15,6 +15,7 @@ extern "C" {
 #include "core/SubtitleOverlay.h"
 #include "cuda/CudaContext.h"
 #include "cuda/CudaBuffer.h"
+#include "cuda/CudaOverlayCompositeEffect.h"
 
 namespace video_engine {
 
@@ -52,6 +53,7 @@ private:
   CudaBuffer overlay_chroma_u_buffer_;
   CudaBuffer overlay_chroma_v_buffer_;
   BlurBoxEffect blur_box_effect_;
+  CudaOverlayCompositeEffect overlay_composite_effect_;
   OverlayLayerRenderer overlay_layer_renderer_;
   SubtitleLayerRenderer subtitle_layer_renderer_;
 };

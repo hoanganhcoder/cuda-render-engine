@@ -54,7 +54,6 @@ public:
       bool flip_horizontal,
       const DeviceVideoTransform& transform,
       bool gaussian_blur,
-      const DeviceSubtitleOverlay& text_overlay,
       cudaStream_t stream) const;
 
 private:

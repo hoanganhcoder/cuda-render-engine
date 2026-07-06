@@ -30,7 +30,6 @@ void BlurBoxEffect::apply(
     float video_scale,
     bool flip_horizontal,
     const DeviceVideoTransform& transform,
-    const DeviceSubtitleOverlay& text_overlay,
     cudaStream_t stream) const {
   cuda_effect_.apply(
       source_frame,
@@ -41,7 +40,6 @@ void BlurBoxEffect::apply(
       flip_horizontal,
       transform,
       sequence_.blur_box.enabled,
-      text_overlay,
       stream);
 }
 

@@ -380,40 +380,15 @@ bool RenderEngine::render(const RenderJob& input_job) {
           1.0f,
           job.flip_horizontal,
           video_transform,
-          DeviceSubtitleOverlay{},
           cuda_context_.stream());
-      static const std::vector<Region> kNoBlurRegions;
-      const DeviceVideoTransform identity_transform{
-          0.0f,
-          0.0f,
-          static_cast<float>(job.width),
-          static_cast<float>(job.height),
-          16,
-          128,
-          128};
+      if (use_previous_frame_history) {
+        cloneFrameTo(previous_frame, output_frame);
+      }
       if (subtitle_device_overlay.enabled()) {
-        blur_box_effect_.apply(
-            output_frame,
-            nullptr,
-            output_frame,
-            kNoBlurRegions,
-            1.0f,
-            false,
-            identity_transform,
-            subtitle_device_overlay,
-            cuda_context_.stream());
+        overlay_composite_effect_.apply(output_frame, subtitle_device_overlay, cuda_context_.stream());
       }
       if (top_device_overlay.enabled()) {
-        blur_box_effect_.apply(
-            output_frame,
-            nullptr,
-            output_frame,
-            kNoBlurRegions,
-            1.0f,
-            false,
-            identity_transform,
-            top_device_overlay,
-            cuda_context_.stream());
+        overlay_composite_effect_.apply(output_frame, top_device_overlay, cuda_context_.stream());
       }
       interval_timers.effect_seconds += elapsedSecondsSince(effect_start_time);
       output_frame->format = AV_PIX_FMT_CUDA;
@@ -422,9 +397,6 @@ bool RenderEngine::render(const RenderJob& input_job) {
       const auto encode_start_time = std::chrono::steady_clock::now();
       encoder.write(output_frame);
       interval_timers.encode_seconds += elapsedSecondsSince(encode_start_time);
-      if (use_previous_frame_history) {
-        cloneFrameTo(previous_frame, output_frame);
-      }
 
       ++frame_index;
       if (frame_index % kLogFrameInterval == 0) {

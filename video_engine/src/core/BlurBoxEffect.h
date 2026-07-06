@@ -24,7 +24,6 @@ public:
       float video_scale,
       bool flip_horizontal,
       const DeviceVideoTransform& transform,
-      const DeviceSubtitleOverlay& text_overlay,
       cudaStream_t stream) const;
 
 private:

@@ -54,13 +54,6 @@ inline std::array<float, 25> buildGaussianWeightsHost(int radius, float sigma) {
   return weights;
 }
 
-inline bool overlayInsideRect(const DeviceSubtitleOverlay& overlay, int x0, int y0, int x1, int y1) {
-  if (!overlay.enabled()) {
-    return true;
-  }
-  return overlay.x >= x0 && overlay.y >= y0 && overlay.x + overlay.width <= x1 && overlay.y + overlay.height <= y1;
-}
-
 __device__ float clamp01(float value) {
   return fminf(1.0f, fmaxf(0.0f, value));
 }
@@ -609,8 +602,8 @@ void CudaSubtitleRectEffect::apply(
     bool flip_horizontal,
     const DeviceVideoTransform& transform,
     bool gaussian_blur,
-    const DeviceSubtitleOverlay& text_overlay,
     cudaStream_t stream) const {
+  const DeviceSubtitleOverlay empty_overlay{};
   const int width = source_frame->width;
   const int height = source_frame->height;
   const int output_width = output_frame->width;
@@ -684,7 +677,7 @@ void CudaSubtitleRectEffect::apply(
     dim3 roi_grid((roi_width + block.x - 1) / block.x, (roi_height + block.y - 1) / block.y);
 
     const bool can_copy_base_frame =
-        video_scale <= 1.0001f && !flip_horizontal && overlayInsideRect(text_overlay, roi_x0, roi_y0, roi_x1, roi_y1);
+        video_scale <= 1.0001f && !flip_horizontal && !empty_overlay.enabled();
     if (can_copy_base_frame && width == output_width && height == output_height &&
         fabsf(transform.display_x) < 0.01f && fabsf(transform.display_y) < 0.01f &&
         fabsf(transform.display_width - static_cast<float>(output_width)) < 0.01f &&
@@ -722,7 +715,7 @@ void CudaSubtitleRectEffect::apply(
           output_height,
           transform,
           flip_horizontal,
-          text_overlay);
+          empty_overlay);
       dim3 base_chroma_grid(((output_width / 2) + block.x - 1) / block.x, ((output_height / 2) + block.y - 1) / block.y);
       subtitleRectChromaKernel<<<base_chroma_grid, block, 0, stream>>>(
           source_uv,
@@ -734,7 +727,7 @@ void CudaSubtitleRectEffect::apply(
           output_height,
           transform,
           flip_horizontal,
-          text_overlay);
+          empty_overlay);
     }
 
     const int luma_downscale = 4;
@@ -807,7 +800,7 @@ void CudaSubtitleRectEffect::apply(
         luma_downscale,
         region_count,
         small_radius_y,
-        text_overlay);
+        empty_overlay);
 
     const int chroma_width = width / 2;
     const int chroma_height = height / 2;
@@ -869,7 +862,7 @@ void CudaSubtitleRectEffect::apply(
           chroma_downscale,
           region_count,
           small_radius_y,
-          text_overlay);
+          empty_overlay);
     }
   } else {
     subtitleRectLumaKernel<<<grid, block, 0, stream>>>(
@@ -882,7 +875,7 @@ void CudaSubtitleRectEffect::apply(
         output_height,
         transform,
         flip_horizontal,
-        text_overlay);
+        empty_overlay);
     dim3 chroma_grid(((output_width / 2) + block.x - 1) / block.x, ((output_height / 2) + block.y - 1) / block.y);
     subtitleRectChromaKernel<<<chroma_grid, block, 0, stream>>>(
         source_uv,
@@ -894,7 +887,7 @@ void CudaSubtitleRectEffect::apply(
         output_height,
         transform,
         flip_horizontal,
-        text_overlay);
+        empty_overlay);
   }
   throwOnCudaError(cudaGetLastError(), "Subtitle rectangle NV12 CUDA kernel failed");
 }

@@ -92,6 +92,7 @@ set(VIDEO_ENGINE_SOURCES
 )
 
 add_library(video_engine_cuda STATIC
+  src/cuda/CudaOverlayCompositeEffect.cu
   src/cuda/CudaSubtitleRectEffect.cu
 )
 
