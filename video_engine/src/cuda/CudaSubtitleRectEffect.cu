@@ -212,6 +212,50 @@ __device__ uint8_t sampleOverlayMaskValue(const uint8_t* plane, const DeviceSubt
   return plane[local_y * overlay.stride + local_x];
 }
 
+__device__ bool sampleOverlayChromaAverage(
+    const DeviceSubtitleOverlay& overlay,
+    int x,
+    int y,
+    float& alpha,
+    float& chroma_u,
+    float& chroma_v) {
+  if (!overlay.enabled()) {
+    return false;
+  }
+
+  float alpha_sum = 0.0f;
+  float chroma_u_sum = 0.0f;
+  float chroma_v_sum = 0.0f;
+  for (int dy = 0; dy < 2; ++dy) {
+    for (int dx = 0; dx < 2; ++dx) {
+      const int sample_x = x + dx;
+      const int sample_y = y + dy;
+      if (sample_x < overlay.x || sample_y < overlay.y || sample_x >= overlay.x + overlay.width ||
+          sample_y >= overlay.y + overlay.height) {
+        continue;
+      }
+      const int local_x = sample_x - overlay.x;
+      const int local_y = sample_y - overlay.y;
+      const int index = local_y * overlay.stride + local_x;
+      const float sample_alpha = normalizeByte(overlay.alpha_mask[index]) * clamp01(overlay.opacity);
+      if (sample_alpha <= 0.0f) {
+        continue;
+      }
+      alpha_sum += sample_alpha;
+      chroma_u_sum += normalizeByte(overlay.chroma_u_mask[index]) * sample_alpha;
+      chroma_v_sum += normalizeByte(overlay.chroma_v_mask[index]) * sample_alpha;
+    }
+  }
+
+  if (alpha_sum <= 0.0f) {
+    return false;
+  }
+  alpha = clamp01(alpha_sum * 0.25f);
+  chroma_u = chroma_u_sum / alpha_sum;
+  chroma_v = chroma_v_sum / alpha_sum;
+  return true;
+}
+
 __global__ void downsampleLumaKernel(
     const uint8_t* source_y,
     uint8_t* small_y,
@@ -466,15 +510,17 @@ __global__ void blendSmallChromaVerticalKernel(
     current_v = blended_v;
   }
 
-  const float overlay_alpha = sampleOverlayAlpha(overlay, full_x, full_y);
-  if (overlay_alpha > 0.0f) {
+  float overlay_alpha = 0.0f;
+  float overlay_u = 0.0f;
+  float overlay_v = 0.0f;
+  if (sampleOverlayChromaAverage(overlay, full_x, full_y, overlay_alpha, overlay_u, overlay_v)) {
     current_u = mixFloat(
         current_u,
-        normalizeByte(sampleOverlayMaskValue(overlay.chroma_u_mask, overlay, full_x, full_y)),
+        overlay_u,
         overlay_alpha);
     current_v = mixFloat(
         current_v,
-        normalizeByte(sampleOverlayMaskValue(overlay.chroma_v_mask, overlay, full_x, full_y)),
+        overlay_v,
         overlay_alpha);
   }
 
@@ -533,15 +579,17 @@ __global__ void subtitleRectChromaKernel(
   float current_v = normalizeByte(current.y);
   const int full_x = x * 2;
   const int full_y = y * 2;
-  const float overlay_alpha = sampleOverlayAlpha(overlay, full_x, full_y);
-  if (overlay_alpha > 0.0f) {
+  float overlay_alpha = 0.0f;
+  float overlay_u = 0.0f;
+  float overlay_v = 0.0f;
+  if (sampleOverlayChromaAverage(overlay, full_x, full_y, overlay_alpha, overlay_u, overlay_v)) {
     current_u = mixFloat(
         current_u,
-        normalizeByte(sampleOverlayMaskValue(overlay.chroma_u_mask, overlay, full_x, full_y)),
+        overlay_u,
         overlay_alpha);
     current_v = mixFloat(
         current_v,
-        normalizeByte(sampleOverlayMaskValue(overlay.chroma_v_mask, overlay, full_x, full_y)),
+        overlay_v,
         overlay_alpha);
   }
 

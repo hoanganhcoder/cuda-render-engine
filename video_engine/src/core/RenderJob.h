@@ -10,6 +10,16 @@
 
 namespace video_engine {
 
+struct ImageOverlaySpec {
+  std::string path;
+  std::string width = "100%";
+  std::string height = "100%";
+  std::string resize_mode = "fit";
+  float opacity = 1.0f;
+  float position_x = 0.0f;
+  float position_y = 0.0f;
+};
+
 struct RenderJob {
   std::string input;
   std::string output;
@@ -76,6 +86,7 @@ struct RenderJob {
   std::vector<Region> regions;
   std::vector<Region> subtitle_regions;
   std::vector<Region> blur_regions;
+  std::vector<ImageOverlaySpec> image_overlays;
 
   static RenderJob fromPythonDict(const pybind11::dict& job_dict);
   void validate() const;

@@ -38,7 +38,7 @@ Sequence RenderJobAdapter::toSequence(const video_engine::RenderJob& job) {
   sequence.blur_box.enabled = job.subtitle_gaussian_blur || !job.blur_regions.empty();
   sequence.blur_box.regions = job.blur_regions.empty() ? job.regions : job.blur_regions;
 
-  sequence.watermark.enabled = !job.watermark_text.empty() || !job.logo_path.empty();
+  sequence.watermark.enabled = !job.watermark_text.empty() || !job.logo_path.empty() || !job.image_overlays.empty();
   return sequence;
 }
 

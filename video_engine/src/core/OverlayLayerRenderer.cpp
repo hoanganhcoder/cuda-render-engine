@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <stdexcept>
 #include <string>
@@ -170,6 +171,74 @@ DecodedRgbaImage scaleImageNearest(const DecodedRgbaImage& source, int target_wi
   return scaled;
 }
 
+DecodedRgbaImage cropImageCenter(const DecodedRgbaImage& source, int target_width, int target_height) {
+  DecodedRgbaImage cropped;
+  cropped.width = std::max(1, std::min(target_width, source.width));
+  cropped.height = std::max(1, std::min(target_height, source.height));
+  cropped.pixels.resize(static_cast<size_t>(cropped.width) * static_cast<size_t>(cropped.height) * 4U, 0);
+
+  const int source_x0 = std::max((source.width - cropped.width) / 2, 0);
+  const int source_y0 = std::max((source.height - cropped.height) / 2, 0);
+  for (int y = 0; y < cropped.height; ++y) {
+    for (int x = 0; x < cropped.width; ++x) {
+      const size_t src_index =
+          (static_cast<size_t>(source_y0 + y) * static_cast<size_t>(source.width) +
+           static_cast<size_t>(source_x0 + x)) *
+          4U;
+      const size_t dst_index =
+          (static_cast<size_t>(y) * static_cast<size_t>(cropped.width) + static_cast<size_t>(x)) * 4U;
+      for (int channel = 0; channel < 4; ++channel) {
+        cropped.pixels[dst_index + static_cast<size_t>(channel)] = source.pixels[src_index + static_cast<size_t>(channel)];
+      }
+    }
+  }
+  return cropped;
+}
+
+int parseOverlayDimension(const std::string& value, int reference, int fallback) {
+  if (value.empty()) {
+    return std::max(1, fallback);
+  }
+  const bool is_percent = value.back() == '%';
+  char* end = nullptr;
+  const float parsed = std::strtof(value.c_str(), &end);
+  if (end == value.c_str()) {
+    return std::max(1, fallback);
+  }
+  if (is_percent) {
+    return std::max(1, static_cast<int>(std::llround(static_cast<float>(reference) * parsed / 100.0f)));
+  }
+  return std::max(1, static_cast<int>(std::llround(parsed)));
+}
+
+DecodedRgbaImage resizeOverlayImage(const DecodedRgbaImage& source, int target_width, int target_height, const std::string& resize_mode) {
+  target_width = std::max(1, target_width);
+  target_height = std::max(1, target_height);
+  if (resize_mode == "stretch") {
+    return scaleImageNearest(source, target_width, target_height);
+  }
+
+  const double source_aspect = source.height > 0 ? static_cast<double>(source.width) / source.height : 1.0;
+  const double target_aspect = target_height > 0 ? static_cast<double>(target_width) / target_height : source_aspect;
+  double scale = 1.0;
+  if (resize_mode == "fill") {
+    scale = target_aspect > source_aspect ? static_cast<double>(target_width) / source.width
+                                          : static_cast<double>(target_height) / source.height;
+  } else {
+    scale = target_aspect > source_aspect ? static_cast<double>(target_height) / source.height
+                                          : static_cast<double>(target_width) / source.width;
+  }
+
+  DecodedRgbaImage scaled = scaleImageNearest(
+      source,
+      std::max(1, static_cast<int>(std::llround(static_cast<double>(source.width) * scale))),
+      std::max(1, static_cast<int>(std::llround(static_cast<double>(source.height) * scale))));
+  if (resize_mode == "fill") {
+    return cropImageCenter(scaled, target_width, target_height);
+  }
+  return scaled;
+}
+
 int reflectPosition(double value, int travel) {
   if (travel <= 0) {
     return 0;
@@ -272,6 +341,13 @@ struct OverlayLayerRenderer::Impl {
   bool text_enabled = false;
   bool logo_enabled = false;
   DecodedRgbaImage logo_image;
+  struct PreparedImageOverlay {
+    DecodedRgbaImage image;
+    float position_x = 0.0f;
+    float position_y = 0.0f;
+    float opacity = 1.0f;
+  };
+  std::vector<PreparedImageOverlay> image_overlays;
 };
 
 OverlayLayerRenderer::OverlayLayerRenderer() : impl_(std::make_unique<Impl>()) {
@@ -285,6 +361,7 @@ void OverlayLayerRenderer::initialize(const RenderJob& job, int video_width, int
   impl_->video_height = video_height;
   impl_->text_enabled = !job.watermark_text.empty();
   impl_->logo_enabled = !job.logo_path.empty();
+  impl_->image_overlays.clear();
 
   impl_->text_job = job;
   impl_->text_job.subtitle_srt.clear();
@@ -324,6 +401,24 @@ void OverlayLayerRenderer::initialize(const RenderJob& job, int video_width, int
     const double aspect = decoded_logo.width > 0 ? static_cast<double>(decoded_logo.height) / decoded_logo.width : 1.0;
     const int target_height = std::clamp(static_cast<int>(std::llround(target_width * aspect)), 1, video_height);
     impl_->logo_image = scaleImageNearest(decoded_logo, target_width, target_height);
+  }
+
+  for (const ImageOverlaySpec& image_spec : job.image_overlays) {
+    const DecodedRgbaImage decoded_image = decodeImageToRgba(image_spec.path);
+    const int target_width = std::clamp(
+        parseOverlayDimension(image_spec.width, video_width, decoded_image.width),
+        1,
+        std::max(video_width, 1));
+    const int target_height = std::clamp(
+        parseOverlayDimension(image_spec.height, video_height, decoded_image.height),
+        1,
+        std::max(video_height, 1));
+    Impl::PreparedImageOverlay prepared;
+    prepared.image = resizeOverlayImage(decoded_image, target_width, target_height, image_spec.resize_mode);
+    prepared.position_x = image_spec.position_x;
+    prepared.position_y = image_spec.position_y;
+    prepared.opacity = image_spec.opacity;
+    impl_->image_overlays.push_back(std::move(prepared));
   }
 }
 
@@ -397,11 +492,29 @@ std::vector<SubtitleOverlay> OverlayLayerRenderer::render(double timestamp_secon
     }
   }
 
+  for (const Impl::PreparedImageOverlay& image : impl_->image_overlays) {
+    if (image.image.width <= 0 || image.image.height <= 0) {
+      continue;
+    }
+    Region image_region;
+    image_region.w = image.image.width;
+    image_region.h = image.image.height;
+    image_region.x = std::clamp(
+        static_cast<int>(std::llround(image.position_x * static_cast<float>(impl_->video_width))),
+        0,
+        std::max(impl_->video_width - image_region.w, 0));
+    image_region.y = std::clamp(
+        static_cast<int>(std::llround(image.position_y * static_cast<float>(impl_->video_height))),
+        0,
+        std::max(impl_->video_height - image_region.h, 0));
+    overlays.push_back(logoToOverlay(image.image, image_region, image.opacity));
+  }
+
   return overlays;
 }
 
 bool OverlayLayerRenderer::available() const {
-  return impl_->logo_enabled || impl_->text_enabled;
+  return impl_->logo_enabled || impl_->text_enabled || !impl_->image_overlays.empty();
 }
 
 }  // namespace video_engine

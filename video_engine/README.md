@@ -144,7 +144,7 @@ This produces a wheel in `video_engine/dist/` that bundles:
 Install on another Colab session:
 
 ```bash
-pip install /path/to/video_engine/dist/video_engine-0.1.9-*.whl
+pip install /path/to/video_engine/dist/video_engine-0.2.1-*.whl
 ```
 
 Then use it directly:
@@ -174,16 +174,17 @@ job = {
             "resize_mode": "fit",
         },
         {
+            "type": "gaussian_blur",
+            "strength": 0.85,
+            "feather": 36,
+            "vertical_stretch": 1.0,
+            "horizontal_blur": 0.4,
+            "temporal_blend": 0.18,
+            "regions": [{"start": 0.0, "end": 9999999.0, "x": 0, "y": 610, "w": 1280, "h": 90}],
+        },
+        {
             "type": "subtitle",
             "srt": "examples/sample.srt",
-            "gaussian_blur": True,
-            "blur": {
-                "strength": 0.85,
-                "feather": 36,
-                "vertical_stretch": 1.0,
-                "horizontal_blur": 0.4,
-                "temporal_blend": 0.18,
-            },
             "font": "Noto Sans",
             "size": 13.0,
             "bold": True,
@@ -195,7 +196,7 @@ job = {
             "outline": 4,
             "shadow": 0,
             "margin": 12,
-            "regions": [{"x": 0, "y": 610, "w": 1280, "h": 90}],
+            "regions": {"x": 0, "y": 610, "w": 1280, "h": 90},
         },
         {
             "type": "watermark",
@@ -216,6 +217,13 @@ job = {
             "scale": 0.16,
             "opacity": 0.24,
             "position": {"x": 0.02, "y": 0.02},
+        },
+        {
+            "type": "image",
+            "path": "image.png",
+            "w": "100%",
+            "h": "100%",
+            "resize_mode": "stretch",
         },
         {
             "type": "gaussian_blur",
@@ -243,10 +251,11 @@ Track job layout:
 - `tracks[*].h`: `left|center|right`; `tracks[*].v`: `top|center|bottom`
 - `tracks[*].video_scale`: extra center zoom after resize-mode placement
 - `tracks[*].flip_horizontal`: mirror source video
-- `tracks[*].type="subtitle"`: SRT/text subtitle layer plus optional blur
+- `tracks[*].type="subtitle"`: SRT/text subtitle layer only
 - `tracks[*].type="gaussian_blur"`: blur-only regions independent of subtitle text
 - `tracks[*].type="watermark"`: moving transparent text watermark
 - `tracks[*].type="logo"`: image overlay; `position.x/y` are relative output coordinates
+- `tracks[*].type="image"`: PNG/JPG template overlay; supports `w`, `h`, `resize_mode`, `opacity`, `position`
 - `subtitle.srt` or `subtitle.text`: legacy subtitle source
 - `subtitle.font` or `subtitle.font_ttf`: system font name or explicit `.ttf`
 - when using `subtitle.font_ttf`, that file is treated as the exact face; for best results provide the matching bold/italic face instead of relying on synthetic styles
@@ -264,8 +273,8 @@ Track job layout:
 - `subtitle.upper`, `watermark.upper`: Unicode-aware uppercase before rendering
 - `subtitle.bold`, `subtitle.italic`, `subtitle.color`
 - `subtitle.outline_color`, `subtitle.back_color`, `subtitle.outline`, `subtitle.shadow`
-- `subtitle.gaussian_blur`: enable Gaussian blur over subtitle regions
-- `subtitle.regions`: list of blur regions with `x/y/w/h/start/end/...`
+- `subtitle.regions`: subtitle text box, either one object or a list of objects
+- `gaussian_blur.regions`: blur regions with `x/y/w/h/start/end/...`; blur is intentionally separate from subtitle text
 - `watermark.text`: transparent text watermark
 - `watermark.font` or `watermark.font_ttf`: system font name or explicit `.ttf`
 - when using `watermark.font_ttf`, that file is treated as the exact face; for best results provide the matching bold/italic face instead of relying on synthetic styles
@@ -281,8 +290,8 @@ Subtitle rendering path:
 
 Editor-style model:
 
-- tracks are evaluated as separate layers: video base, blur/subtitle, then top overlays
-- watermark/logo overlays are composited after blur, so they do not expand blur regions or make subtitle blur persistent
+- tracks are evaluated as separate layers: video base, blur regions, subtitle text, then top overlays
+- subtitle/watermark/logo/image overlays are composited after blur, so text stays sharp and blur does not leak through the whole video
 - `subtitle.regions[*]` defines the subtitle text box
 - text layout uses `wrap/clip/auto_fit/padding/alignment`
 - blur is applied independently through the region mask path (`blur box`)

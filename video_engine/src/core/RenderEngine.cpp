@@ -380,10 +380,18 @@ bool RenderEngine::render(const RenderJob& input_job) {
           1.0f,
           job.flip_horizontal,
           video_transform,
-          subtitle_device_overlay,
+          DeviceSubtitleOverlay{},
           cuda_context_.stream());
-      if (top_device_overlay.enabled()) {
-        static const std::vector<Region> kNoBlurRegions;
+      static const std::vector<Region> kNoBlurRegions;
+      const DeviceVideoTransform identity_transform{
+          0.0f,
+          0.0f,
+          static_cast<float>(job.width),
+          static_cast<float>(job.height),
+          16,
+          128,
+          128};
+      if (subtitle_device_overlay.enabled()) {
         blur_box_effect_.apply(
             output_frame,
             nullptr,
@@ -391,7 +399,19 @@ bool RenderEngine::render(const RenderJob& input_job) {
             kNoBlurRegions,
             1.0f,
             false,
-            DeviceVideoTransform{0.0f, 0.0f, static_cast<float>(job.width), static_cast<float>(job.height), 16, 128, 128},
+            identity_transform,
+            subtitle_device_overlay,
+            cuda_context_.stream());
+      }
+      if (top_device_overlay.enabled()) {
+        blur_box_effect_.apply(
+            output_frame,
+            nullptr,
+            output_frame,
+            kNoBlurRegions,
+            1.0f,
+            false,
+            identity_transform,
             top_device_overlay,
             cuda_context_.stream());
       }

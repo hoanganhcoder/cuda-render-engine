@@ -639,8 +639,23 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     const int requested_font_pixels = impl_->font_pixels;
     const int min_font_pixels = std::max(12, static_cast<int>(std::floor(static_cast<float>(requested_font_pixels) * 0.55f)));
 
-    cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, surface_width, surface_height);
+    constexpr int kPangoSupersample = 2;
+    const int render_width = surface_width * kPangoSupersample;
+    const int render_height = surface_height * kPangoSupersample;
+    const int render_side_padding = side_padding * kPangoSupersample;
+    const int render_top_padding = top_padding * kPangoSupersample;
+    const int render_usable_width = usable_width * kPangoSupersample;
+    const int render_usable_height = usable_height * kPangoSupersample;
+
+    cairo_surface_t* surface = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, render_width, render_height);
     cairo_t* cr = cairo_create(surface);
+    cairo_set_antialias(cr, CAIRO_ANTIALIAS_BEST);
+    cairo_font_options_t* font_options = cairo_font_options_create();
+    cairo_font_options_set_antialias(font_options, CAIRO_ANTIALIAS_BEST);
+    cairo_font_options_set_hint_style(font_options, CAIRO_HINT_STYLE_FULL);
+    cairo_font_options_set_hint_metrics(font_options, CAIRO_HINT_METRICS_ON);
+    cairo_set_font_options(cr, font_options);
+    cairo_font_options_destroy(font_options);
     cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
     cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
     cairo_paint(cr);
@@ -663,26 +678,26 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     pango_font_description_set_style(desc, request_italic ? PANGO_STYLE_ITALIC : PANGO_STYLE_NORMAL);
     pango_layout_set_alignment(layout, toPangoAlignment(impl_->job.subtitle_align_h));
     pango_layout_set_wrap(layout, PANGO_WRAP_WORD_CHAR);
-    pango_layout_set_width(layout, usable_width * PANGO_SCALE);
+    pango_layout_set_width(layout, render_usable_width * PANGO_SCALE);
     pango_layout_set_text(layout, normalized_text.c_str(), -1);
 
     int fitted_font_pixels = requested_font_pixels;
     int layout_width = 0;
     int layout_height = 0;
     for (int font_pixels = requested_font_pixels; font_pixels >= min_font_pixels; --font_pixels) {
-      pango_font_description_set_absolute_size(desc, font_pixels * PANGO_SCALE);
+      pango_font_description_set_absolute_size(desc, font_pixels * kPangoSupersample * PANGO_SCALE);
       pango_layout_set_font_description(layout, desc);
       pango_layout_context_changed(layout);
       pango_layout_get_pixel_size(layout, &layout_width, &layout_height);
-      const bool width_ok = !impl_->job.subtitle_wrap || layout_width <= usable_width;
-      const bool height_ok = !impl_->job.subtitle_auto_fit || layout_height <= usable_height;
+      const bool width_ok = !impl_->job.subtitle_wrap || layout_width <= render_usable_width;
+      const bool height_ok = !impl_->job.subtitle_auto_fit || layout_height <= render_usable_height;
       fitted_font_pixels = font_pixels;
       if (width_ok && height_ok) {
         break;
       }
     }
 
-    pango_font_description_set_absolute_size(desc, fitted_font_pixels * PANGO_SCALE);
+    pango_font_description_set_absolute_size(desc, fitted_font_pixels * kPangoSupersample * PANGO_SCALE);
     pango_layout_set_font_description(layout, desc);
     pango_layout_context_changed(layout);
     pango_layout_get_pixel_size(layout, &layout_width, &layout_height);
@@ -692,22 +707,22 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     const int overlay_y = impl_->job.subtitle_clip
                               ? anchor_region->y
                               : std::clamp(anchor_region->y + (anchor_region->h - surface_height) / 2, 0, std::max(0, impl_->video_height - surface_height));
-    double origin_x = static_cast<double>(side_padding);
-    double origin_y = static_cast<double>(top_padding);
+    double origin_x = static_cast<double>(render_side_padding);
+    double origin_y = static_cast<double>(render_top_padding);
     if (impl_->job.subtitle_clip) {
       if (align_v == "middle") {
-        origin_y += std::max(usable_height - layout_height, 0) * 0.5;
+        origin_y += std::max(render_usable_height - layout_height, 0) * 0.5;
       } else if (align_v == "bottom") {
-        origin_y += std::max(usable_height - layout_height, 0);
+        origin_y += std::max(render_usable_height - layout_height, 0);
       }
     } else {
-      const double region_top = static_cast<double>(anchor_region->y - overlay_y);
+      const double region_top = static_cast<double>(anchor_region->y - overlay_y) * kPangoSupersample;
       if (align_v == "middle") {
-        origin_y = region_top + (static_cast<double>(anchor_region->h) - static_cast<double>(layout_height)) * 0.5;
+        origin_y = region_top + (static_cast<double>(anchor_region->h * kPangoSupersample) - static_cast<double>(layout_height)) * 0.5;
       } else if (align_v == "bottom") {
-        origin_y = region_top + static_cast<double>(anchor_region->h - layout_height - top_padding);
+        origin_y = region_top + static_cast<double>(anchor_region->h * kPangoSupersample - layout_height - render_top_padding);
       } else {
-        origin_y = region_top + static_cast<double>(top_padding);
+        origin_y = region_top + static_cast<double>(render_top_padding);
       }
     }
 
@@ -727,7 +742,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
           static_cast<double>(outline_color.green) / 255.0,
           static_cast<double>(outline_color.blue) / 255.0,
           outline_alpha);
-      cairo_set_line_width(cr, std::max(1.0, static_cast<double>(impl_->job.subtitle_outline) * 2.0));
+      cairo_set_line_width(cr, std::max(1.0, static_cast<double>(impl_->job.subtitle_outline) * 2.0 * kPangoSupersample));
       cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
       cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
       cairo_stroke_preserve(cr);
@@ -760,13 +775,27 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     overlay.chroma_v_mask.assign(pixel_count, 128);
 
     for (int y = 0; y < surface_height; ++y) {
-      const unsigned char* row = data + static_cast<size_t>(y) * static_cast<size_t>(stride);
       for (int x = 0; x < surface_width; ++x) {
-        const unsigned char* pixel = row + static_cast<size_t>(x) * 4U;
-        const uint8_t blue = pixel[0];
-        const uint8_t green = pixel[1];
-        const uint8_t red = pixel[2];
-        const uint8_t alpha = pixel[3];
+        int blue_sum = 0;
+        int green_sum = 0;
+        int red_sum = 0;
+        int alpha_sum = 0;
+        for (int sample_y = 0; sample_y < kPangoSupersample; ++sample_y) {
+          const unsigned char* row =
+              data + static_cast<size_t>(y * kPangoSupersample + sample_y) * static_cast<size_t>(stride);
+          for (int sample_x = 0; sample_x < kPangoSupersample; ++sample_x) {
+            const unsigned char* pixel = row + static_cast<size_t>(x * kPangoSupersample + sample_x) * 4U;
+            blue_sum += pixel[0];
+            green_sum += pixel[1];
+            red_sum += pixel[2];
+            alpha_sum += pixel[3];
+          }
+        }
+        constexpr int sample_count = kPangoSupersample * kPangoSupersample;
+        const uint8_t blue = static_cast<uint8_t>((blue_sum + sample_count / 2) / sample_count);
+        const uint8_t green = static_cast<uint8_t>((green_sum + sample_count / 2) / sample_count);
+        const uint8_t red = static_cast<uint8_t>((red_sum + sample_count / 2) / sample_count);
+        const uint8_t alpha = static_cast<uint8_t>((alpha_sum + sample_count / 2) / sample_count);
         const size_t index = static_cast<size_t>(y) * static_cast<size_t>(surface_width) + static_cast<size_t>(x);
         overlay.alpha_mask[index] = alpha;
         if (alpha == 0) {

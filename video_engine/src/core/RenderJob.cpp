@@ -3,6 +3,7 @@
 #include <cctype>
 #include <filesystem>
 #include <stdexcept>
+#include <utility>
 
 namespace py = pybind11;
 
@@ -109,7 +110,14 @@ std::vector<Region> parseRegionList(const py::dict& dict, const char* key, const
   if (!dict.contains(key) || dict[key].is_none()) {
     return regions;
   }
-  py::list region_list = py::cast<py::list>(dict[key]);
+  py::handle region_value = dict[key];
+  if (py::isinstance<py::dict>(region_value)) {
+    Region region = parseRegion(region_value);
+    applyBlurDefaults(region, blur_defaults);
+    regions.push_back(region);
+    return regions;
+  }
+  py::list region_list = py::cast<py::list>(region_value);
   regions.reserve(region_list.size());
   for (const py::handle& item : region_list) {
     Region region = parseRegion(item);
@@ -237,7 +245,7 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
         job.video_align_v = optionalAliasValue<std::string>(track, "align_v", "v", job.video_align_v);
         job.resize_mode = optionalValue<std::string>(track, "resize_mode", job.resize_mode);
       } else if (type == "subtitle") {
-        job.subtitle_gaussian_blur = optionalValue<bool>(track, "gaussian_blur", job.subtitle_gaussian_blur);
+        const bool subtitle_track_blur = optionalValue<bool>(track, "gaussian_blur", false);
         job.subtitle_srt = optionalAliasValue<std::string>(track, "srt", "subtitle_srt", job.subtitle_srt);
         job.subtitle_text = optionalAliasValue<std::string>(track, "text", "subtitle_text", job.subtitle_text);
         job.subtitle_font_family = optionalAliasValue<std::string>(track, "font", "font_family", job.subtitle_font_family);
@@ -265,7 +273,8 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
         const py::dict blur_dict = optionalDict(track, "blur");
         std::vector<Region> regions = parseRegionList(track, "regions", blur_dict);
         job.subtitle_regions.insert(job.subtitle_regions.end(), regions.begin(), regions.end());
-        if (job.subtitle_gaussian_blur) {
+        if (subtitle_track_blur) {
+          job.subtitle_gaussian_blur = true;
           job.blur_regions.insert(job.blur_regions.end(), regions.begin(), regions.end());
         }
       } else if (type == "gaussian_blur") {
@@ -298,22 +307,27 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
           job.logo_position_x = optionalValue<float>(position_dict, "x", job.logo_position_x);
           job.logo_position_y = optionalValue<float>(position_dict, "y", job.logo_position_y);
         }
+      } else if (type == "image") {
+        ImageOverlaySpec image;
+        image.path = requiredValue<std::string>(track, "path");
+        image.width = optionalValue<std::string>(track, "w", image.width);
+        image.height = optionalValue<std::string>(track, "h", image.height);
+        image.resize_mode = optionalValue<std::string>(track, "resize_mode", image.resize_mode);
+        image.opacity = optionalValue<float>(track, "opacity", image.opacity);
+        if (track.contains("position") && !track["position"].is_none()) {
+          py::dict position_dict = py::cast<py::dict>(track["position"]);
+          image.position_x = optionalValue<float>(position_dict, "x", image.position_x);
+          image.position_y = optionalValue<float>(position_dict, "y", image.position_y);
+        }
+        job.image_overlays.push_back(std::move(image));
       }
     }
   } else if (!subtitle_dict.empty() && subtitle_dict.contains("regions") && !subtitle_dict["regions"].is_none()) {
-    py::list region_list = py::cast<py::list>(subtitle_dict["regions"]);
-    job.regions.reserve(region_list.size());
-    for (const py::handle& item : region_list) {
-      job.regions.push_back(parseRegion(item));
-    }
+    job.regions = parseRegionList(subtitle_dict, "regions", py::dict());
     job.subtitle_regions = job.regions;
     job.blur_regions = job.regions;
   } else if (job_dict.contains("regions") && !job_dict["regions"].is_none()) {
-    py::list region_list = py::cast<py::list>(job_dict["regions"]);
-    job.regions.reserve(region_list.size());
-    for (const py::handle& item : region_list) {
-      job.regions.push_back(parseRegion(item));
-    }
+    job.regions = parseRegionList(job_dict, "regions", py::dict());
     job.subtitle_regions = job.regions;
     job.blur_regions = job.regions;
   }
@@ -450,6 +464,17 @@ void RenderJob::validate() const {
   }
   if (watermark_opacity < 0.0f || watermark_opacity > 1.0f) {
     throw std::runtime_error("watermark_opacity must be within [0, 1].");
+  }
+  for (const ImageOverlaySpec& image : image_overlays) {
+    if (image.path.empty()) {
+      throw std::runtime_error("image track path must not be empty.");
+    }
+    if (image.resize_mode != "fit" && image.resize_mode != "fill" && image.resize_mode != "stretch") {
+      throw std::runtime_error("image resize_mode must be one of: fit, fill, stretch.");
+    }
+    if (image.opacity < 0.0f || image.opacity > 1.0f) {
+      throw std::runtime_error("image opacity must be within [0, 1].");
+    }
   }
 
   for (const Region& region : regions) {
