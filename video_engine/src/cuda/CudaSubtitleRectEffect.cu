@@ -180,75 +180,6 @@ __device__ float gaussianWeightY1D(int offset) {
   return kGaussianWeightsY[abs(offset)];
 }
 
-__device__ float sampleOverlayAlpha(const DeviceSubtitleOverlay& overlay, int x, int y) {
-  if (!overlay.enabled()) {
-    return 0.0f;
-  }
-  if (x < overlay.x || y < overlay.y || x >= overlay.x + overlay.width || y >= overlay.y + overlay.height) {
-    return 0.0f;
-  }
-  const int local_x = x - overlay.x;
-  const int local_y = y - overlay.y;
-  const uint8_t alpha = overlay.alpha_mask[local_y * overlay.stride + local_x];
-  return normalizeByte(alpha) * clamp01(overlay.opacity);
-}
-
-__device__ uint8_t sampleOverlayMaskValue(const uint8_t* plane, const DeviceSubtitleOverlay& overlay, int x, int y) {
-  if (plane == nullptr || !overlay.enabled()) {
-    return 0;
-  }
-  if (x < overlay.x || y < overlay.y || x >= overlay.x + overlay.width || y >= overlay.y + overlay.height) {
-    return 0;
-  }
-  const int local_x = x - overlay.x;
-  const int local_y = y - overlay.y;
-  return plane[local_y * overlay.stride + local_x];
-}
-
-__device__ bool sampleOverlayChromaAverage(
-    const DeviceSubtitleOverlay& overlay,
-    int x,
-    int y,
-    float& alpha,
-    float& chroma_u,
-    float& chroma_v) {
-  if (!overlay.enabled()) {
-    return false;
-  }
-
-  float alpha_sum = 0.0f;
-  float chroma_u_sum = 0.0f;
-  float chroma_v_sum = 0.0f;
-  for (int dy = 0; dy < 2; ++dy) {
-    for (int dx = 0; dx < 2; ++dx) {
-      const int sample_x = x + dx;
-      const int sample_y = y + dy;
-      if (sample_x < overlay.x || sample_y < overlay.y || sample_x >= overlay.x + overlay.width ||
-          sample_y >= overlay.y + overlay.height) {
-        continue;
-      }
-      const int local_x = sample_x - overlay.x;
-      const int local_y = sample_y - overlay.y;
-      const int index = local_y * overlay.stride + local_x;
-      const float sample_alpha = normalizeByte(overlay.alpha_mask[index]) * clamp01(overlay.opacity);
-      if (sample_alpha <= 0.0f) {
-        continue;
-      }
-      alpha_sum += sample_alpha;
-      chroma_u_sum += normalizeByte(overlay.chroma_u_mask[index]) * sample_alpha;
-      chroma_v_sum += normalizeByte(overlay.chroma_v_mask[index]) * sample_alpha;
-    }
-  }
-
-  if (alpha_sum <= 0.0f) {
-    return false;
-  }
-  alpha = clamp01(alpha_sum * 0.25f);
-  chroma_u = chroma_u_sum / alpha_sum;
-  chroma_v = chroma_v_sum / alpha_sum;
-  return true;
-}
-
 __global__ void downsampleLumaKernel(
     const uint8_t* source_y,
     uint8_t* small_y,
@@ -323,8 +254,7 @@ __global__ void blendSmallLumaVerticalKernel(
     int small_height,
     int downscale,
     int region_count,
-    int blur_radius_y,
-    DeviceSubtitleOverlay overlay) {
+    int blur_radius_y) {
   const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
   const int local_y = blockIdx.y * blockDim.y + threadIdx.y;
   if (local_x >= roi_width || local_y >= roi_height) {
@@ -360,10 +290,6 @@ __global__ void blendSmallLumaVerticalKernel(
     current = blended;
   }
 
-  const float overlay_alpha = sampleOverlayAlpha(overlay, x, y);
-  if (overlay_alpha > 0.0f) {
-    current = mixFloat(current, normalizeByte(sampleOverlayMaskValue(overlay.luma_mask, overlay, x, y)), overlay_alpha);
-  }
   output_y[y * pitch_y + x] = denormalizeByte(current);
 }
 
@@ -454,8 +380,7 @@ __global__ void blendSmallChromaVerticalKernel(
     int small_height,
     int downscale,
     int region_count,
-    int blur_radius_y,
-    DeviceSubtitleOverlay overlay) {
+    int blur_radius_y) {
   const int local_x = blockIdx.x * blockDim.x + threadIdx.x;
   const int local_y = blockIdx.y * blockDim.y + threadIdx.y;
   if (local_x >= roi_width || local_y >= roi_height) {
@@ -503,26 +428,13 @@ __global__ void blendSmallChromaVerticalKernel(
     current_v = blended_v;
   }
 
-  float overlay_alpha = 0.0f;
-  float overlay_u = 0.0f;
-  float overlay_v = 0.0f;
-  if (sampleOverlayChromaAverage(overlay, full_x, full_y, overlay_alpha, overlay_u, overlay_v)) {
-    current_u = mixFloat(
-        current_u,
-        overlay_u,
-        overlay_alpha);
-    current_v = mixFloat(
-        current_v,
-        overlay_v,
-        overlay_alpha);
-  }
 
   uint8_t* row = output_uv + y * pitch_uv + x * 2;
   row[0] = denormalizeByte(current_u);
   row[1] = denormalizeByte(current_v);
 }
 
-__global__ void subtitleRectLumaKernel(
+__global__ void baseLumaKernel(
     const uint8_t* source_y,
     uint8_t* output_y,
     int pitch_y,
@@ -531,8 +443,7 @@ __global__ void subtitleRectLumaKernel(
     int dst_width,
     int dst_height,
     DeviceVideoTransform transform,
-    bool flip_horizontal,
-    DeviceSubtitleOverlay overlay) {
+    bool flip_horizontal) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= dst_width || y >= dst_height) {
@@ -540,15 +451,11 @@ __global__ void subtitleRectLumaKernel(
   }
 
   float current = sampleBaseLuma(source_y, pitch_y, src_width, src_height, x, y, transform, flip_horizontal);
-  const float overlay_alpha = sampleOverlayAlpha(overlay, x, y);
-  if (overlay_alpha > 0.0f) {
-    current = mixFloat(current, normalizeByte(sampleOverlayMaskValue(overlay.luma_mask, overlay, x, y)), overlay_alpha);
-  }
 
   output_y[y * pitch_y + x] = denormalizeByte(current);
 }
 
-__global__ void subtitleRectChromaKernel(
+__global__ void baseChromaKernel(
     const uint8_t* source_uv,
     uint8_t* output_uv,
     int pitch_uv,
@@ -557,8 +464,7 @@ __global__ void subtitleRectChromaKernel(
     int dst_width,
     int dst_height,
     DeviceVideoTransform transform,
-    bool flip_horizontal,
-    DeviceSubtitleOverlay overlay) {
+    bool flip_horizontal) {
   const int x = blockIdx.x * blockDim.x + threadIdx.x;
   const int y = blockIdx.y * blockDim.y + threadIdx.y;
   const int dst_chroma_width = dst_width / 2;
@@ -570,21 +476,6 @@ __global__ void subtitleRectChromaKernel(
   uchar2 current = sampleBaseChroma(source_uv, pitch_uv, src_width, src_height, x * 2, y * 2, transform, flip_horizontal);
   float current_u = normalizeByte(current.x);
   float current_v = normalizeByte(current.y);
-  const int full_x = x * 2;
-  const int full_y = y * 2;
-  float overlay_alpha = 0.0f;
-  float overlay_u = 0.0f;
-  float overlay_v = 0.0f;
-  if (sampleOverlayChromaAverage(overlay, full_x, full_y, overlay_alpha, overlay_u, overlay_v)) {
-    current_u = mixFloat(
-        current_u,
-        overlay_u,
-        overlay_alpha);
-    current_v = mixFloat(
-        current_v,
-        overlay_v,
-        overlay_alpha);
-  }
 
   uint8_t* row = output_uv + y * pitch_uv + x * 2;
   row[0] = denormalizeByte(current_u);
@@ -603,7 +494,6 @@ void CudaSubtitleRectEffect::apply(
     const DeviceVideoTransform& transform,
     bool gaussian_blur,
     cudaStream_t stream) const {
-  const DeviceSubtitleOverlay empty_overlay{};
   const int width = source_frame->width;
   const int height = source_frame->height;
   const int output_width = output_frame->width;
@@ -668,7 +558,7 @@ void CudaSubtitleRectEffect::apply(
     }
 
     if (roi_x1 <= roi_x0 || roi_y1 <= roi_y0) {
-      throwOnCudaError(cudaGetLastError(), "Subtitle rectangle NV12 CUDA kernel failed");
+      throwOnCudaError(cudaGetLastError(), "Blur box NV12 CUDA kernel failed");
       return;
     }
 
@@ -677,7 +567,7 @@ void CudaSubtitleRectEffect::apply(
     dim3 roi_grid((roi_width + block.x - 1) / block.x, (roi_height + block.y - 1) / block.y);
 
     const bool can_copy_base_frame =
-        video_scale <= 1.0001f && !flip_horizontal && !empty_overlay.enabled();
+        video_scale <= 1.0001f && !flip_horizontal;
     if (can_copy_base_frame && width == output_width && height == output_height &&
         fabsf(transform.display_x) < 0.01f && fabsf(transform.display_y) < 0.01f &&
         fabsf(transform.display_width - static_cast<float>(output_width)) < 0.01f &&
@@ -705,7 +595,7 @@ void CudaSubtitleRectEffect::apply(
               stream),
           "Failed to copy chroma plane on GPU");
     } else {
-      subtitleRectLumaKernel<<<grid, block, 0, stream>>>(
+      baseLumaKernel<<<grid, block, 0, stream>>>(
           source_y,
           output_y,
           source_frame->linesize[0],
@@ -714,10 +604,9 @@ void CudaSubtitleRectEffect::apply(
           output_width,
           output_height,
           transform,
-          flip_horizontal,
-          empty_overlay);
+          flip_horizontal);
       dim3 base_chroma_grid(((output_width / 2) + block.x - 1) / block.x, ((output_height / 2) + block.y - 1) / block.y);
-      subtitleRectChromaKernel<<<base_chroma_grid, block, 0, stream>>>(
+      baseChromaKernel<<<base_chroma_grid, block, 0, stream>>>(
           source_uv,
           output_uv,
           source_frame->linesize[1],
@@ -726,8 +615,7 @@ void CudaSubtitleRectEffect::apply(
           output_width,
           output_height,
           transform,
-          flip_horizontal,
-          empty_overlay);
+          flip_horizontal);
     }
 
     const int luma_downscale = 4;
@@ -799,8 +687,7 @@ void CudaSubtitleRectEffect::apply(
         small_luma_height,
         luma_downscale,
         region_count,
-        small_radius_y,
-        empty_overlay);
+        small_radius_y);
 
     const int chroma_width = width / 2;
     const int chroma_height = height / 2;
@@ -861,11 +748,10 @@ void CudaSubtitleRectEffect::apply(
           small_chroma_height,
           chroma_downscale,
           region_count,
-          small_radius_y,
-          empty_overlay);
+          small_radius_y);
     }
   } else {
-    subtitleRectLumaKernel<<<grid, block, 0, stream>>>(
+    baseLumaKernel<<<grid, block, 0, stream>>>(
         source_y,
         output_y,
         source_frame->linesize[0],
@@ -874,10 +760,9 @@ void CudaSubtitleRectEffect::apply(
         output_width,
         output_height,
         transform,
-        flip_horizontal,
-        empty_overlay);
+        flip_horizontal);
     dim3 chroma_grid(((output_width / 2) + block.x - 1) / block.x, ((output_height / 2) + block.y - 1) / block.y);
-    subtitleRectChromaKernel<<<chroma_grid, block, 0, stream>>>(
+    baseChromaKernel<<<chroma_grid, block, 0, stream>>>(
         source_uv,
         output_uv,
         source_frame->linesize[1],
@@ -886,10 +771,9 @@ void CudaSubtitleRectEffect::apply(
         output_width,
         output_height,
         transform,
-        flip_horizontal,
-        empty_overlay);
+        flip_horizontal);
   }
-  throwOnCudaError(cudaGetLastError(), "Subtitle rectangle NV12 CUDA kernel failed");
+  throwOnCudaError(cudaGetLastError(), "Blur box NV12 CUDA kernel failed");
 }
 
 }  // namespace video_engine

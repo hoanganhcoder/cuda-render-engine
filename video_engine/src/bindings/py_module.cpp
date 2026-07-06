@@ -11,7 +11,7 @@ namespace py = pybind11;
 
 namespace video_engine {
 
-constexpr const char* kVersion = "0.2.3";
+constexpr const char* kVersion = "0.2.4";
 
 class ScopedPythonLogSink {
 public:
