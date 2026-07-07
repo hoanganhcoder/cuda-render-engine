@@ -8,9 +8,11 @@
 #include <stdexcept>
 #include <string>
 
+extern "C" {
 #include <libavutil/hwcontext.h>
 #include <libavutil/imgutils.h>
 #include <libswscale/swscale.h>
+}
 
 #include "core/Logger.h"
 #include "core/timeline/RenderJobAdapter.h"
