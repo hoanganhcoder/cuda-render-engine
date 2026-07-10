@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <deque>
 #include <memory>
 #include <limits>
 #include <optional>
@@ -429,8 +430,12 @@ struct TextBoxRenderer::Impl {
   mutable std::unordered_map<GlyphCacheKey, GlyphCacheValue, GlyphCacheKeyHasher> glyph_cache;
   mutable std::unordered_map<std::string, LineLayout> line_cache;
   mutable std::unordered_map<OverlayCacheKey, SubtitleOverlay, OverlayCacheKeyHasher> overlay_cache;
+  mutable std::deque<OverlayCacheKey> overlay_cache_order;
 #endif
 };
+
+constexpr size_t kMaxCachedTextOverlays = 24;
+constexpr size_t kMaxCachedLineLayouts = 4096;
 
 TextBoxRenderer::TextBoxRenderer() : impl_(std::make_unique<Impl>()) {
 }
@@ -457,6 +462,7 @@ void TextBoxRenderer::initialize(const RenderJob& job, int video_width, int vide
   impl_->glyph_cache.clear();
   impl_->line_cache.clear();
   impl_->overlay_cache.clear();
+  impl_->overlay_cache_order.clear();
   if (impl_->hb_font != nullptr) {
     hb_font_destroy(impl_->hb_font);
     impl_->hb_font = nullptr;
@@ -612,6 +618,20 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
   if (cached != impl_->overlay_cache.end()) {
     return cached->second;
   }
+  auto cache_overlay = [&](const SubtitleOverlay& rendered_overlay) {
+    auto existing = impl_->overlay_cache.find(cache_key);
+    if (existing != impl_->overlay_cache.end()) {
+      existing->second = rendered_overlay;
+      return;
+    }
+    impl_->overlay_cache.emplace(cache_key, rendered_overlay);
+    impl_->overlay_cache_order.push_back(cache_key);
+    while (impl_->overlay_cache_order.size() > kMaxCachedTextOverlays) {
+      const OverlayCacheKey old_key = impl_->overlay_cache_order.front();
+      impl_->overlay_cache_order.pop_front();
+      impl_->overlay_cache.erase(old_key);
+    }
+  };
 
   const SubtitleCue& cue = impl_->cues[cue_index];
   const std::string normalized_text = normalizeCueText(cue.text, impl_->job.subtitle_uppercase);
@@ -824,7 +844,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     g_object_unref(font_map);
     cairo_destroy(cr);
     cairo_surface_destroy(surface);
-    impl_->overlay_cache.emplace(cache_key, overlay);
+    cache_overlay(overlay);
     return overlay;
   }
 #endif
@@ -902,6 +922,9 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
       layout.advance_width = pen_x;
       layout.width = (min_x <= max_x) ? (max_x - min_x) : pen_x;
       hb_buffer_destroy(buffer);
+      if (impl_->line_cache.size() >= kMaxCachedLineLayouts) {
+        impl_->line_cache.clear();
+      }
       return impl_->line_cache.emplace(cache_id, std::move(layout)).first->second;
     };
 
@@ -1226,7 +1249,7 @@ SubtitleOverlay TextBoxRenderer::render(double timestamp_seconds, const Region* 
     }
   }
 
-  impl_->overlay_cache.emplace(cache_key, overlay);
+  cache_overlay(overlay);
   return overlay;
 #endif
 }
