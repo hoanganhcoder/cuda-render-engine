@@ -393,7 +393,7 @@ bool RenderEngine::render(const RenderJob& input_job) {
     overlay_layer_renderer_.initialize(job, job.width, job.height);
     const DeviceVideoTransform video_transform =
         makeVideoTransform(job, decoder.width(), decoder.height(), job.width, job.height);
-    if (!job.subtitle_srt.empty() || !job.subtitle_text.empty()) {
+    if (!job.subtitle_srt.empty() || !job.subtitle_ass.empty() || !job.subtitle_text.empty()) {
       if (subtitle_layer_renderer_.available()) {
         Logger::info("Using subtitle layer renderer.");
       } else {

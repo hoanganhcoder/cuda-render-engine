@@ -35,6 +35,8 @@ struct RenderJob {
   std::string resize_mode = "fit";
   bool subtitle_gaussian_blur = true;
   std::string subtitle_srt;
+  std::string subtitle_ass;
+  std::string subtitle_renderer = "auto";
   std::string subtitle_text;
   std::string subtitle_font_family = "Noto Sans";
   std::string subtitle_font_path;

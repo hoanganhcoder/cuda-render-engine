@@ -2,6 +2,7 @@
 
 #include <memory>
 
+#include "core/AssSubtitleRenderer.h"
 #include "core/LayerRenderer.h"
 #include "core/TextBoxRenderer.h"
 
@@ -22,6 +23,7 @@ public:
 private:
   struct Impl;
   std::unique_ptr<Impl> impl_;
+  AssSubtitleRenderer ass_renderer_;
   TextBoxRenderer text_box_renderer_;
 };
 

@@ -1,7 +1,9 @@
 #include "core/RenderJob.h"
 
+#include <algorithm>
 #include <cctype>
 #include <filesystem>
+#include <string>
 #include <stdexcept>
 #include <utility>
 
@@ -146,6 +148,24 @@ bool looksLikeFontPath(const std::string& value) {
   return has_suffix(".ttf") || has_suffix(".otf") || has_suffix(".ttc");
 }
 
+bool hasExtension(const std::string& value, const char* extension) {
+  std::string lower = value;
+  std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  const std::string suffix(extension);
+  return lower.size() >= suffix.size() && lower.compare(lower.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
+
+void assignSubtitlePath(RenderJob& job, const std::string& path) {
+  if (path.empty()) {
+    return;
+  }
+  if (hasExtension(path, ".ass") || hasExtension(path, ".ssa")) {
+    job.subtitle_ass = path;
+  } else {
+    job.subtitle_srt = path;
+  }
+}
+
 }  // namespace
 
 RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
@@ -169,6 +189,10 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.flip_horizontal = optionalValue<bool>(job_dict, "flip_horizontal", false);
   job.subtitle_gaussian_blur = optionalScopedValue<bool>(subtitle_dict, job_dict, "gaussian_blur", "subtitle_gaussian_blur", true);
   job.subtitle_srt = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "srt", "subtitle_srt", "subtitle_srt", "subtitle_srt", "");
+  job.subtitle_ass = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "ass", "subtitle_ass", "subtitle_ass", "subtitle_ass", "");
+  assignSubtitlePath(job, optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "path", "subtitle_path", "subtitle_path", "subtitle_path", ""));
+  job.subtitle_renderer =
+      optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "renderer", "subtitle_renderer", "subtitle_renderer", "subtitle_renderer", "auto");
   job.subtitle_text = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "text", "subtitle_text", "subtitle_text", "subtitle_text", "");
   job.subtitle_font_family = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "font", "font_family", "subtitle_font_family", "subtitle_font_family", "Noto Sans");
   job.subtitle_font_path = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "font_ttf", "font_path", "subtitle_font_path", "subtitle_font_path", "");
@@ -247,6 +271,9 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
       } else if (type == "subtitle") {
         const bool subtitle_track_blur = optionalValue<bool>(track, "gaussian_blur", false);
         job.subtitle_srt = optionalAliasValue<std::string>(track, "srt", "subtitle_srt", job.subtitle_srt);
+        job.subtitle_ass = optionalAliasValue<std::string>(track, "ass", "subtitle_ass", job.subtitle_ass);
+        assignSubtitlePath(job, optionalAliasValue<std::string>(track, "path", "subtitle_path", ""));
+        job.subtitle_renderer = optionalAliasValue<std::string>(track, "renderer", "subtitle_renderer", job.subtitle_renderer);
         job.subtitle_text = optionalAliasValue<std::string>(track, "text", "subtitle_text", job.subtitle_text);
         job.subtitle_font_family = optionalAliasValue<std::string>(track, "font", "font_family", job.subtitle_font_family);
         job.subtitle_font_path = optionalAliasValue<std::string>(track, "font_ttf", "font_path", job.subtitle_font_path);

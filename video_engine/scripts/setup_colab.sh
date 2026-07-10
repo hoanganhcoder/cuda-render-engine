@@ -26,6 +26,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y \
   libfontconfig1-dev \
   libfreetype6-dev \
   libharfbuzz-dev \
+  libass-dev \
   libnuma-dev \
   libpango1.0-dev \
   fonts-dejavu-core \
@@ -42,6 +43,7 @@ PYBIND11_DIR="${PYBIND11_DIR:-$(python -c 'import pybind11; print(pybind11.get_c
 echo "[3.5/7] Verifying text layout dependencies"
 pkg-config --modversion cairo
 pkg-config --modversion pangocairo
+pkg-config --modversion libass
 
 echo "[4/7] Verifying CUDA runtime"
 if ! command -v nvidia-smi >/dev/null 2>&1; then

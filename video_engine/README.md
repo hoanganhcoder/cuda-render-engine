@@ -80,6 +80,7 @@ If you vendor FFmpeg locally, place it under `video_engine/ffmpeg-dev/` with `in
 
 Text rendering backends:
 
+- ASS/SSA standards path: `libass`
 - preferred subtitle text-box path on Linux/Colab: `Pango + Cairo + Fontconfig`
 - fallback text-box path: `FreeType + HarfBuzz` (`TextBoxRenderer`)
 `CMakeLists.txt` prefers that local tree before falling back to `pkg-config`.
@@ -141,10 +142,12 @@ This produces a wheel in `video_engine/dist/` that bundles:
 - Python wrapper `video_engine/__init__.py`
 - runtime FFmpeg libraries from `video_engine/ffmpeg-dev`
 
+If the wheel was built with ASS support, the target runtime also needs system `libass` available, for example `apt-get install -y libass-dev` on Colab/Linux.
+
 Install on another Colab session:
 
 ```bash
-pip install /path/to/video_engine/dist/video_engine-0.3.2-*.whl
+pip install /path/to/video_engine/dist/video_engine-0.4.0-*.whl
 ```
 
 Then use it directly:
@@ -241,6 +244,28 @@ print(video_engine.version())
 print(video_engine.render(job))
 ```
 
+ASS/SSA subtitles can be rendered with libass while keeping the video path on GPU:
+
+```python
+job = {
+    "video_aspect_ratio": "16:9",
+    "output_path": "output.mp4",
+    "tracks": [
+        {"type": "video", "path": "input.mp4", "resize_mode": "fit"},
+        {
+            "type": "subtitle",
+            "path": "subtitles.ass",
+            "renderer": "libass",
+            "font": "Noto Sans",
+            "font_ttf": "/content/NotoSans-Regular.ttf",
+            "opacity": 1.0,
+        },
+    ],
+}
+```
+
+`libass` preserves ASS timing, layout, style tags, positions, karaoke, and animation semantics. It rasterizes the subtitle layer on CPU, then the engine uploads only the subtitle overlay and composites it on the CUDA frame before NVENC.
+
 Preview one rendered frame for editor UI:
 
 ```python
@@ -262,7 +287,9 @@ Track job layout:
 - `tracks[*].h`: `left|center|right`; `tracks[*].v`: `top|center|bottom`
 - `tracks[*].video_scale`: extra center zoom after resize-mode placement
 - `tracks[*].flip_horizontal`: mirror source video
-- `tracks[*].type="subtitle"`: SRT/text subtitle layer only
+- `tracks[*].type="subtitle"`: SRT/text or ASS subtitle layer
+- `tracks[*].path` with `.ass`/`.ssa`, or `tracks[*].ass`: ASS/SSA source rendered by libass
+- `tracks[*].renderer="libass"`: force ASS renderer; `auto` chooses libass for `.ass`/`.ssa`
 - `tracks[*].type="gaussian_blur"`: blur-only regions independent of subtitle text
 - `tracks[*].type="watermark"`: moving transparent text watermark
 - `tracks[*].type="logo"`: image overlay; `position.x/y` are relative output coordinates

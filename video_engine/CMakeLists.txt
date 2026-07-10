@@ -56,6 +56,7 @@ if(PkgConfig_FOUND)
   pkg_check_modules(FONTCONFIG QUIET IMPORTED_TARGET fontconfig)
   pkg_check_modules(CAIRO QUIET IMPORTED_TARGET cairo)
   pkg_check_modules(PANGO QUIET IMPORTED_TARGET pangocairo)
+  pkg_check_modules(LIBASS QUIET IMPORTED_TARGET libass)
 endif()
 if(TARGET PkgConfig::HARFBUZZ)
   target_compile_definitions(video_engine_subtitle INTERFACE VIDEO_ENGINE_HAS_HARFBUZZ=1)
@@ -68,6 +69,10 @@ if(TARGET PkgConfig::CAIRO AND TARGET PkgConfig::PANGO)
   target_link_libraries(video_engine_subtitle INTERFACE PkgConfig::CAIRO PkgConfig::PANGO)
   target_compile_definitions(video_engine_subtitle INTERFACE VIDEO_ENGINE_HAS_PANGO=1)
 endif()
+if(TARGET PkgConfig::LIBASS)
+  target_link_libraries(video_engine_subtitle INTERFACE PkgConfig::LIBASS)
+  target_compile_definitions(video_engine_subtitle INTERFACE VIDEO_ENGINE_HAS_LIBASS=1)
+endif()
 find_package(Freetype QUIET)
 if(Freetype_FOUND AND TARGET PkgConfig::HARFBUZZ)
   target_link_libraries(video_engine_subtitle INTERFACE Freetype::Freetype PkgConfig::HARFBUZZ)
@@ -77,6 +82,7 @@ endif()
 set(VIDEO_ENGINE_SOURCES
   src/bindings/py_module.cpp
   src/core/BlurBoxEffect.cpp
+  src/core/AssSubtitleRenderer.cpp
   src/core/Logger.cpp
   src/core/OverlayLayerRenderer.cpp
   src/core/RenderEngine.cpp
