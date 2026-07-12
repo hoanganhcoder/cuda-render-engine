@@ -33,6 +33,7 @@ struct RenderJob {
   std::string video_align_h = "center";
   std::string video_align_v = "center";
   std::string resize_mode = "fit";
+  float video_time_scale = 1.0f;
   bool subtitle_gaussian_blur = true;
   std::string subtitle_srt;
   std::string subtitle_ass;

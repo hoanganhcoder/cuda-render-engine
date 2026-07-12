@@ -147,7 +147,7 @@ If the wheel was built with ASS support, the target runtime also needs system `l
 Install on another Colab session:
 
 ```bash
-pip install /path/to/video_engine/dist/video_engine-0.4.0-*.whl
+pip install /path/to/video_engine/dist/video_engine-0.4.2-*.whl
 ```
 
 Then use it directly:
@@ -286,6 +286,7 @@ Track job layout:
 - `tracks[*].resize_mode`: `fit`, `fill`, or `stretch`
 - `tracks[*].h`: `left|center|right`; `tracks[*].v`: `top|center|bottom`
 - `tracks[*].video_scale`: extra center zoom after resize-mode placement
+- `tracks[*].video_time_scale` or `video_stretch`: output duration multiplier; `1.29` is equivalent to `setpts=1.29*PTS` but is encoded directly by the engine
 - `tracks[*].flip_horizontal`: mirror source video
 - `tracks[*].type="subtitle"`: SRT/text or ASS subtitle layer
 - `tracks[*].path` with `.ass`/`.ssa`, or `tracks[*].ass`: ASS/SSA source rendered by libass

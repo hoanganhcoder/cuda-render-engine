@@ -1,8 +1,11 @@
 #include "codec/FFmpegEncoder.h"
 
-#include <cmath>
 #include <string>
 #include <stdexcept>
+
+extern "C" {
+#include <libavutil/rational.h>
+}
 
 namespace video_engine {
 
@@ -81,8 +84,9 @@ void FFmpegEncoder::open(const std::string& output_path, int width, int height, 
   codec_context_->width = width_;
   codec_context_->height = height_;
   codec_context_->pix_fmt = AV_PIX_FMT_CUDA;
-  codec_context_->time_base = AVRational{1, static_cast<int>(std::lround(fps_))};
-  codec_context_->framerate = AVRational{static_cast<int>(std::lround(fps_)), 1};
+  const AVRational frame_rate = av_d2q(fps_, 1'000'000);
+  codec_context_->framerate = frame_rate;
+  codec_context_->time_base = av_inv_q(frame_rate);
   codec_context_->gop_size = 60;
   codec_context_->max_b_frames = 0;
   codec_context_->bit_rate = 8'000'000;

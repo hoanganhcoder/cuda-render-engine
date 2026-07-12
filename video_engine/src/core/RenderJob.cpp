@@ -155,6 +155,11 @@ bool hasExtension(const std::string& value, const char* extension) {
   return lower.size() >= suffix.size() && lower.compare(lower.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
+std::string lowerString(std::string value) {
+  std::transform(value.begin(), value.end(), value.begin(), [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+  return value;
+}
+
 void assignSubtitlePath(RenderJob& job, const std::string& path) {
   if (path.empty()) {
     return;
@@ -186,6 +191,7 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
   job.video_aspect_ratio = optionalValue<std::string>(job_dict, "video_aspect_ratio", job.video_aspect_ratio);
   job.bg_color = optionalValue<std::string>(job_dict, "bg_color", job.bg_color);
   job.video_scale = optionalValue<float>(job_dict, "video_scale", 1.0f);
+  job.video_time_scale = optionalAliasValue<float>(job_dict, "video_time_scale", "video_stretch", 1.0f);
   job.flip_horizontal = optionalValue<bool>(job_dict, "flip_horizontal", false);
   job.subtitle_gaussian_blur = optionalScopedValue<bool>(subtitle_dict, job_dict, "gaussian_blur", "subtitle_gaussian_blur", true);
   job.subtitle_srt = optionalScopedAliasValue<std::string>(subtitle_dict, job_dict, "srt", "subtitle_srt", "subtitle_srt", "subtitle_srt", "");
@@ -264,6 +270,7 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
       if (type == "video") {
         job.input = requiredValue<std::string>(track, "path");
         job.video_scale = optionalValue<float>(track, "video_scale", job.video_scale);
+        job.video_time_scale = optionalAliasValue<float>(track, "video_time_scale", "video_stretch", job.video_time_scale);
         job.flip_horizontal = optionalValue<bool>(track, "flip_horizontal", job.flip_horizontal);
         job.video_align_h = optionalAliasValue<std::string>(track, "align_h", "h", job.video_align_h);
         job.video_align_v = optionalAliasValue<std::string>(track, "align_v", "v", job.video_align_v);
@@ -367,6 +374,7 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
     job.watermark_font_path = job.watermark_font_family;
     job.watermark_font_family = std::filesystem::path(job.watermark_font_path).stem().string();
   }
+  job.subtitle_renderer = lowerString(job.subtitle_renderer);
 
   job.validate();
   return job;
@@ -404,8 +412,15 @@ void RenderJob::validate() const {
   if (video_scale < 1.0f) {
     throw std::runtime_error("video_scale must be >= 1.0.");
   }
+  if (video_time_scale <= 0.0f) {
+    throw std::runtime_error("video_time_scale must be > 0.");
+  }
   if (resize_mode != "fit" && resize_mode != "fill" && resize_mode != "stretch") {
     throw std::runtime_error("resize_mode must be one of: fit, fill, stretch.");
+  }
+  if (subtitle_renderer != "auto" && subtitle_renderer != "textbox" && subtitle_renderer != "libass" &&
+      subtitle_renderer != "ass") {
+    throw std::runtime_error("subtitle_renderer must be one of: auto, textbox, libass, ass.");
   }
   if (video_align_h != "left" && video_align_h != "center" && video_align_h != "right") {
     throw std::runtime_error("video horizontal alignment must be left, center, or right.");
