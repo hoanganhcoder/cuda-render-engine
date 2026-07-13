@@ -27,7 +27,8 @@ void throwOnError(int error_code, const std::string& context) {
 
 FFmpegEncoder::FFmpegEncoder() {
   packet_ = av_packet_alloc();
-  if (!packet_) {
+  audio_packet_ = av_packet_alloc();
+  if (!packet_ || !audio_packet_) {
     throw std::runtime_error("Failed to allocate FFmpeg encoder packet.");
   }
 }
@@ -38,10 +39,17 @@ FFmpegEncoder::~FFmpegEncoder() {
   } catch (...) {
   }
   av_packet_free(&packet_);
+  av_packet_free(&audio_packet_);
 }
 
-void FFmpegEncoder::open(const std::string& output_path, int width, int height, double fps, AVBufferRef* hw_device_context,
-                         AVBufferRef* hw_frames_context) {
+void FFmpegEncoder::open(
+    const std::string& output_path,
+    int width,
+    int height,
+    double fps,
+    AVBufferRef* hw_device_context,
+    AVBufferRef* hw_frames_context,
+    const std::string& audio_path) {
   close();
   (void)hw_frames_context;
 
@@ -108,6 +116,10 @@ void FFmpegEncoder::open(const std::string& output_path, int width, int height, 
                "Failed to copy encoder parameters to stream");
   stream_->time_base = codec_context_->time_base;
 
+  if (!audio_path.empty()) {
+    openAudioInput(audio_path);
+  }
+
   if (!(format_context_->oformat->flags & AVFMT_NOFILE)) {
     throwOnError(avio_open(&format_context_->pb, output_path.c_str(), AVIO_FLAG_WRITE),
                  "Failed to open output file");
@@ -134,6 +146,7 @@ void FFmpegEncoder::close() {
   if (codec_context_) {
     encodeFrame(nullptr);
   }
+  drainAudio();
   if (format_context_) {
     av_write_trailer(format_context_);
   }
@@ -147,6 +160,9 @@ void FFmpegEncoder::close() {
     avformat_free_context(format_context_);
     format_context_ = nullptr;
   }
+  if (audio_input_context_) {
+    avformat_close_input(&audio_input_context_);
+  }
   if (hw_frames_context_) {
     av_buffer_unref(&hw_frames_context_);
   }
@@ -154,7 +170,12 @@ void FFmpegEncoder::close() {
     av_buffer_unref(&hw_device_context_);
   }
   stream_ = nullptr;
+  audio_input_stream_ = nullptr;
+  audio_stream_ = nullptr;
   codec_ = nullptr;
+  audio_stream_index_ = -1;
+  audio_eof_ = false;
+  has_pending_audio_packet_ = false;
   width_ = 0;
   height_ = 0;
   fps_ = 0.0;
@@ -171,8 +192,88 @@ void FFmpegEncoder::encodeFrame(AVFrame* frame) {
     throwOnError(receive_result, "Failed to receive encoded packet");
     av_packet_rescale_ts(packet_, codec_context_->time_base, stream_->time_base);
     packet_->stream_index = stream_->index;
+    const double video_timestamp_seconds =
+        packet_->dts == AV_NOPTS_VALUE ? 0.0 : static_cast<double>(packet_->dts) * av_q2d(stream_->time_base);
+    writeAudioUntil(video_timestamp_seconds + 1.0);
     throwOnError(av_interleaved_write_frame(format_context_, packet_), "Failed to write encoded packet");
     av_packet_unref(packet_);
+  }
+}
+
+void FFmpegEncoder::openAudioInput(const std::string& audio_path) {
+  throwOnError(avformat_open_input(&audio_input_context_, audio_path.c_str(), nullptr, nullptr),
+               "Failed to open mux audio input");
+  throwOnError(avformat_find_stream_info(audio_input_context_, nullptr), "Failed to read mux audio stream info");
+  audio_stream_index_ = av_find_best_stream(audio_input_context_, AVMEDIA_TYPE_AUDIO, -1, -1, nullptr, 0);
+  if (audio_stream_index_ < 0) {
+    throw std::runtime_error("Failed to find an audio stream in mux audio input.");
+  }
+  audio_input_stream_ = audio_input_context_->streams[audio_stream_index_];
+  audio_stream_ = avformat_new_stream(format_context_, nullptr);
+  if (!audio_stream_) {
+    throw std::runtime_error("Failed to create output audio stream.");
+  }
+  throwOnError(avcodec_parameters_copy(audio_stream_->codecpar, audio_input_stream_->codecpar),
+               "Failed to copy audio parameters to output stream");
+  audio_stream_->codecpar->codec_tag = 0;
+  audio_stream_->time_base = audio_input_stream_->time_base;
+  audio_eof_ = false;
+  has_pending_audio_packet_ = false;
+}
+
+bool FFmpegEncoder::readNextAudioPacket() {
+  if (audio_eof_ || has_pending_audio_packet_ || audio_input_context_ == nullptr || audio_stream_ == nullptr) {
+    return has_pending_audio_packet_;
+  }
+
+  while (true) {
+    const int result = av_read_frame(audio_input_context_, audio_packet_);
+    if (result == AVERROR_EOF) {
+      audio_eof_ = true;
+      return false;
+    }
+    throwOnError(result, "Failed to read mux audio packet");
+    if (audio_packet_->stream_index != audio_stream_index_) {
+      av_packet_unref(audio_packet_);
+      continue;
+    }
+    av_packet_rescale_ts(audio_packet_, audio_input_stream_->time_base, audio_stream_->time_base);
+    audio_packet_->stream_index = audio_stream_->index;
+    has_pending_audio_packet_ = true;
+    return true;
+  }
+}
+
+double FFmpegEncoder::pendingAudioTimestampSeconds() const {
+  if (!has_pending_audio_packet_ || audio_stream_ == nullptr) {
+    return 0.0;
+  }
+  const int64_t timestamp = audio_packet_->dts != AV_NOPTS_VALUE ? audio_packet_->dts : audio_packet_->pts;
+  return timestamp == AV_NOPTS_VALUE ? 0.0 : static_cast<double>(timestamp) * av_q2d(audio_stream_->time_base);
+}
+
+void FFmpegEncoder::writeAudioUntil(double timestamp_seconds) {
+  if (audio_stream_ == nullptr) {
+    return;
+  }
+  while (readNextAudioPacket()) {
+    if (pendingAudioTimestampSeconds() > timestamp_seconds) {
+      return;
+    }
+    throwOnError(av_interleaved_write_frame(format_context_, audio_packet_), "Failed to write mux audio packet");
+    has_pending_audio_packet_ = false;
+    av_packet_unref(audio_packet_);
+  }
+}
+
+void FFmpegEncoder::drainAudio() {
+  if (audio_stream_ == nullptr) {
+    return;
+  }
+  while (readNextAudioPacket()) {
+    throwOnError(av_interleaved_write_frame(format_context_, audio_packet_), "Failed to drain mux audio packet");
+    has_pending_audio_packet_ = false;
+    av_packet_unref(audio_packet_);
   }
 }
 

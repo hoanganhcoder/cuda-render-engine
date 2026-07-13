@@ -182,6 +182,7 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
 
   job.input = has_tracks ? "" : requiredValue<std::string>(job_dict, "input");
   job.output = optionalAliasValue<std::string>(job_dict, "output", "output_path", "");
+  job.audio_path = optionalAliasValue<std::string>(job_dict, "audio_path", "audio", "");
   if (job.output.empty() && !has_tracks) {
     throw std::runtime_error("Missing required job field: output");
   }
@@ -275,6 +276,13 @@ RenderJob RenderJob::fromPythonDict(const py::dict& job_dict) {
         job.video_align_h = optionalAliasValue<std::string>(track, "align_h", "h", job.video_align_h);
         job.video_align_v = optionalAliasValue<std::string>(track, "align_v", "v", job.video_align_v);
         job.resize_mode = optionalValue<std::string>(track, "resize_mode", job.resize_mode);
+      } else if (type == "audio") {
+        AudioTrackSpec audio;
+        audio.path = requiredValue<std::string>(track, "path");
+        job.audio_tracks.push_back(audio);
+        if (job.audio_path.empty()) {
+          job.audio_path = audio.path;
+        }
       } else if (type == "subtitle") {
         const bool subtitle_track_blur = optionalValue<bool>(track, "gaussian_blur", false);
         job.subtitle_srt = optionalAliasValue<std::string>(track, "srt", "subtitle_srt", job.subtitle_srt);
@@ -506,6 +514,11 @@ void RenderJob::validate() const {
   }
   if (watermark_opacity < 0.0f || watermark_opacity > 1.0f) {
     throw std::runtime_error("watermark_opacity must be within [0, 1].");
+  }
+  for (const AudioTrackSpec& audio : audio_tracks) {
+    if (audio.path.empty()) {
+      throw std::runtime_error("audio track path must not be empty.");
+    }
   }
   for (const ImageOverlaySpec& image : image_overlays) {
     if (image.path.empty()) {

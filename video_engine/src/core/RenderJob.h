@@ -20,9 +20,14 @@ struct ImageOverlaySpec {
   float position_y = 0.0f;
 };
 
+struct AudioTrackSpec {
+  std::string path;
+};
+
 struct RenderJob {
   std::string input;
   std::string output;
+  std::string audio_path;
   int width = 0;
   int height = 0;
   double fps = 0.0;
@@ -89,6 +94,7 @@ struct RenderJob {
   std::vector<Region> regions;
   std::vector<Region> subtitle_regions;
   std::vector<Region> blur_regions;
+  std::vector<AudioTrackSpec> audio_tracks;
   std::vector<ImageOverlaySpec> image_overlays;
 
   static RenderJob fromPythonDict(const pybind11::dict& job_dict);

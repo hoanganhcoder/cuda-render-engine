@@ -421,7 +421,8 @@ bool RenderEngine::render(const RenderJob& input_job) {
             job.height,
             job.fps / static_cast<double>(job.video_time_scale),
             decoder.hwDeviceContext(),
-            decoded_frame->hw_frames_ctx);
+            decoded_frame->hw_frames_ctx,
+            job.audio_path);
         output_frame = allocateHardwareFrame(encoder.hwFramesContext(), job.width, job.height);
         if (use_previous_frame_history) {
           previous_frame = allocateHardwareFrame(encoder.hwFramesContext(), job.width, job.height);

@@ -147,7 +147,7 @@ If the wheel was built with ASS support, the target runtime also needs system `l
 Install on another Colab session:
 
 ```bash
-pip install /path/to/video_engine/dist/video_engine-0.4.2-*.whl
+pip install /path/to/video_engine/dist/video_engine-0.5.1-*.whl
 ```
 
 Then use it directly:
@@ -288,6 +288,7 @@ Track job layout:
 - `tracks[*].video_scale`: extra center zoom after resize-mode placement
 - `tracks[*].video_time_scale` or `video_stretch`: output duration multiplier; `1.29` is equivalent to `setpts=1.29*PTS` but is encoded directly by the engine
 - `tracks[*].flip_horizontal`: mirror source video
+- `tracks[*].type="audio"`: remux a prepared audio stream into the final output while rendering video
 - `tracks[*].type="subtitle"`: SRT/text or ASS subtitle layer
 - `tracks[*].path` with `.ass`/`.ssa`, or `tracks[*].ass`: ASS/SSA source rendered by libass
 - `tracks[*].renderer="libass"`: force ASS renderer; `auto` chooses libass for `.ass`/`.ssa`
@@ -301,6 +302,30 @@ Track job layout:
 - `video_scale`: zoom from center, `1.0` means no zoom, `1.2` means zoom in 20%
 - `flip_horizontal`: mirror the whole video left-to-right
 - `subtitle.size`, `watermark.size`: `%` of video height, not pixels
+
+For long dubbed videos, avoid a huge intermediate rendered-video file by preparing the final mixed audio as AAC/M4A first, then passing it to the engine:
+
+```python
+job = {
+    "output_path": "/content/final.mp4",
+    "tracks": [
+        {
+            "type": "video",
+            "path": "/content/input.mp4",
+            "video_time_scale": video_stretch,
+            "resize_mode": "fit",
+        },
+        {
+            "type": "audio",
+            "path": "/content/render/final_mix.m4a",
+        },
+        # blur/subtitle/watermark/logo tracks...
+    ],
+}
+```
+
+The engine copies audio packets into the same MP4 while NVENC writes video packets, so there is no second 50GB video file and no second video encode.
+Top-level `audio_path` is still accepted as a legacy shortcut, but `tracks[*].type="audio"` is preferred.
 - `subtitle.size` default is `1.5` and `subtitle.italic` default is `true`
 - subtitle text is rendered as an editor-style text box inside `subtitle.regions[*]`
 - `subtitle.wrap`: wrap to the text box width
